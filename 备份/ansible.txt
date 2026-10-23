@@ -1,0 +1,138 @@
+1) Ansible 是什么？核心优势？
+Ansible 是无代理（agentless）的自动化运维工具，用 SSH/WinRM 管理主机，做配置管理、应用部署、编排。
+优势：上手快、YAML 可读性高、无需在目标机装 agent。
+
+2) Ansible 架构组件有哪些？
+Inventory：主机清单
+Modules：执行单元（如 copy、yum）
+Playbook：任务编排（YAML）
+Role：标准化目录结构，便于复用
+Facts：目标主机信息（ansible_facts）
+Plugins：扩展能力（callback/filter/lookup）
+
+3) Playbook 和 Ad‑hoc 命令区别？
+Ad‑hoc：一次性临时命令，适合快操作
+Playbook：可版本化、可重复执行、适合正式流程
+
+4) Inventory 怎么分组？
+可按环境/业务分组，如：
+prod, qa
+web, db
+支持组嵌套和变量继承，常见 group_vars/、host_vars/。
+
+5) Role 的意义是什么？
+把变量、任务、模板、handler 按规范拆分，提升复用和可维护性。 
+面试加分点：大型项目一定要 role 化，不要单大 playbook。
+
+6) 什么是幂等性（Idempotency）？
+同一任务执行多次结果一致，不重复改动。
+Ansible 大多数模块天然幂等（如 package、file），shell/command 需自行控制。
+
+7) command、shell、raw 区别？
+command：不走 shell，安全，不能用管道重定向      
+shell：走 shell，可用 | > &&
+raw：最底层命令，通常用于 Python 未就绪场景
+//没有注入风险，所以安全
+
+8) when、register、changed_when、failed_when 用途？
+when：条件执行
+register：保存任务输出               //把任务的执行结果保存到变量中，供后续任务使用。
+changed_when：自定义 changed 状态    // 执行结果
+failed_when：自定义失败条件
+
+
+9) handlers 是什么？
+只在被 notify 触发时执行，常用于配置变更后重启服务。
+避免每个任务都重启，降低抖动。
+//它只在任务状态为 changed 时执行，并且默认在当前 play 的普通任务完成后统一执行。
+
+
+10) template 和 copy 区别？
+copy：原样拷贝文件
+template：Jinja2 渲染变量后下发
+
+11) 变量优先级（常考）
+大方向记忆：命令行/extra vars 最高，role defaults 最低。     //-e 传入的 extra vars 优先级最高。
+面试可答：实际项目中要避免同名变量冲突，统一命名规范。
+
+12) Ansible Vault 用来干嘛？
+加密敏感信息（密码、密钥、token）。
+常见做法：仓库里存密文，流水线运行时解密。
+// Vault 密码放在 CI/CD 平台的 Secret 管理中，流水线运行时注入临时密码文件。
+
+
+13) 如何提升执行速度？
+开启 pipelining             
+提高 forks
+使用 strategy: free（视任务依赖）   //free 允许执行快的主机继续执行后续任务，不必等待慢主机,视任务依赖而定
+减少不必要 facts 收集（gather_facts: false）
+尽量用幂等模块替代重型 shell    //减少没必要执行
+//默认执行模块需要通过 SSH 创建临时目录、上传模块、执行并清理；开启 pipelining 后，模块可以直接通过 SSH 管道传给远程 Python 执行，减少临时文件传输和 SSH 往返，从而提高执行效率。
+
+
+
+14) 如何做滚动发布？
+用 serial 分批执行（如 serial: 10% 或 serial: 2），结合健康检查与回滚步骤。
+//Ansible 中通过 serial 将主机分批执行，每批完成部署、重启和健康检查后再进入下一批；结合 block/rescue、备份和回滚机制，可以在发现异常时停止发布并恢复旧版本，从而实现安全的滚动发布。
+
+
+15) 如何处理失败与回滚？
+block/rescue/always
+any_errors_fatal        // 任意主机发生未处理错误后，当前批次完成当前任务，随后终止整个 Play。
+max_fail_percentage     //达到指定失败比例。就停止发布
+前置备份 + 发布后验证 + 失败回滚任务
+
+
+16) import_tasks 和 include_tasks 区别？
+import_tasks：静态导入（解析时确定）
+include_tasks：动态导入（运行时决定）
+面试常问：配合 when 时行为不同。
+//import_tasks 是静态导入，解析阶段展开，外层条件通常会传递给所有被导入任务；include_tasks 是动态包含，运行时才加载，适合根据变量或条件动态选择任务文件。
+- name: Import Debian tasks
+  ansible.builtin.import_tasks: debian.yml
+  when: ansible_facts["os_family"] == "Debian"
+-------------------------------------------------------
+- name: Include OS-specific tasks
+  ansible.builtin.include_tasks: "{{ ansible_facts['os_family'] | lower }}.yml"
+
+
+
+17) facts 是什么？如何用？
+setup 模块收集的系统信息，如 IP、OS、内存。
+可用于条件分支：不同系统执行不同包管理任务。   //when: ansible_facts["os_family"] == "RedHat"
+//Facts 是 Ansible 通过 setup 模块收集的远程主机信息，例如操作系统、IP、CPU 和内存，并以变量形式供 Playbook 使用。可以利用 Facts 做条件判断，例如在 Debian 上使用 apt，在 RedHat 上使用 dnf；如果不需要这些信息，可以设置 gather_facts: false 来提升速度。
+
+18) 如何在 Ansible 中做权限提升？
+become: true，常配 become_user、become_method。
+典型：普通用户 SSH 登录，提权到 root 执行。
+
+
+19) 常见最佳实践？
+一环境一 inventory   //为开发、测试、生产环境分别维护主机清单和变量，避免误操作生产环境。
+role 化 + 目录规范
+全程幂等
+敏感信息用 vault
+CI 做 --check --diff 预演   //检查变化，显示差异
+变更前后健康检查   //call api
+
+
+20) Ansible 适合/不适合什么场景？
+适合：配置管理、批量运维、应用发布。
+不适合：强实时、毫秒级编排控制场景（更偏调度系统能力）。
+
+
+
+面试官，我分三点说：
+
+# 服务器规模和批量管理
+我平时管大概 20 到 30 台，包括 K8s 的 3 master、10 worker，还有 MySQL、Redis、监控这些。批量管理主要用 Ansible，少量用脚本。Ansible 无 agent，靠 SSH，适合中小规模。
+
+# Playbook 怎么保证幂等
+核心是靠 Ansible 模块本身幂等，比如 yum、copy、template、service，执行多次结果一样。尽量不用 shell/command，非要用就加 changed_when 或 creates 判断。这样重复跑不会重复改。
+
+# Playbook 怎么处理 api 证书和 kube-proxy 证书
+我们集群用 kubeadm 部署，api 证书和 kube-proxy 证书默认在 /etc/kubernetes/pki。Playbook 主要做两件事：
+一是用 copy 模块把 CA、apiserver、kube-proxy 的证书和 key 分发到各节点，权限设 600；
+二是轮换时用 kubeadm certs renew 或 openssl 重新签发，然后滚动重启 kubelet 和 kube-proxy。kube-proxy 证书一般由 kubeadm 生成，
+也可以走 DaemonSet 自动挂载。核心就是：证书统一由 CA 签，Playbook 负责分发和轮换，权限收紧。
+总结：20-30 台，Ansible 批量管；幂等靠模块和条件判断；证书用 kubeadm 管理，Playbook 分发和轮换。

@@ -1,0 +1,114 @@
+@library('dsx_gcp_shared_libraries@infra-spec')_
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"10")),
+    pipelineTriggers ([
+        parameterizedCron('''
+            0 16 * * * % ENVIRONMENT_NAME=dev;BUSINESS_REGION=ASP;STATUS=DOWN;
+        ''')
+    ]),
+    parameters([
+        choice(name: "ENVIRONMENT_NAME", choices: ["dev","sit","UAT","preprod","prod"], description: ""),
+        choice(name: "BUSINESS_REGION", choices: ["ASP", "GB", "MENA", "Core", "East ASP"], description: "Business region given configuration work for"),
+        choice(name: "STATUS", choices: ["DOWN","UP"], description: "Should the LOGSINK be shutdown or started up"),
+    ])
+])
+
+static final String C_CONFIG_ID = "${env.BUILD_TAG}".toLowerCase().replace("jenkins-", "").replace("_", "-").replace(" ", "-")
+static final String C_CONFIG_YML_FILE = "${params.ENVIRONMENT_NAME.toLowerCase()}.yml"
+def sourceContent = libraryResource "dsx/${params.BUSINESS_REGION.toLowerCase()}/${C_CONFIG_YML_FILE}"
+def C_MY_OBJECT = readYaml text: "${sourceContent}"
+
+pipeline {
+    agent {
+        node { label 'cm-linux' }
+    }
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    environment {
+        GOOGLE_APPLICATION_CREDENTIALS = "$env.WORKSPACE/target_key.json"
+        NO_PROXY                        = "127.0.0.1,localhost,hsbc"
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps{
+                script {
+                    // via terraform key to connect with gcp project
+                    key = "terraform-sa-${ENVIRONMENT_NAME.toLowerCase()}-${BUSINESS_REGION.toLowerCase()}"
+                    echo "Using key: ${key} to connect to GCP project: ${C_MY_OBJECT.global.project_id}"
+
+                    withCredentials([file(credentialsId: key, variable: 'GCP_KEY')]){
+                        sh(script: 'cat ${GCP_KEY} > ./target_key.json', returnStdout: false)
+                        sh(returnStdout: true, script: "gcloud config configurations create disablologsink-${C_CONFIG_ID}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/type http_no_tunnel")
+                        sh(returnStdout: true, script: "gcloud config set proxy/address ${C_MY_OBJECT.global.gcp_proxy}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/port 3128")
+                        sh(returnStdout: true, script: "gcloud auth activate-service-account --key-file=target_key.json")
+                        sh(script: "gcloud config set project '${C_MY_OBJECT.global.project_id}' --configuration='disablologsink-${C_CONFIG_ID}'", returnStdout: false)
+                    }
+                }
+            }
+        }
+
+        stage('Disable Logs') {
+            environment {
+                HTTPS_PROXY="${C_MY_OBJECT.global.gcp_proxy}:3128"
+            }
+            when {
+                expression { return params.STATUS == 'DOWN' }
+            }
+            steps {
+                script {
+                    def projectId = C_MY_OBJECT.global.project_id
+                    def logsinklist = sh(script: "gcloud logging sinks list --project=${projectId} --format='value(name)'", returnStdout: true).trim().split('\n')
+                    for (def logsinkname : logsinklist) {
+                        if (logsinkname == '_Required') {
+                            echo "Skipping ${logsinkname} log sink as it is a default log sink created by GCP and cannot be disabled"
+                            continue
+                        }
+                        def disabled=sh(returnStdout: true, script: "gcloud logging sinks describe ${logsinkname} --project=${projectId} --format='table[no-heading](disabled)'").trim()
+                        if (disabled == 'true') {
+                            echo "Log sink ${logsinkname} in project ${projectId} is already disabled and nothing to do"
+                        } else {
+                            sh(returnStdout: true, script: "gcloud logging sinks update ${logsinkname} --disabled --project=${projectId} ")
+                            echo "Log sink ${logsinkname} in project ${projectId} is disabled! "
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Enable Logs') {
+            environment {
+                HTTPS_PROXY="${C_MY_OBJECT.global.gcp_proxy}:3128"
+            }
+            when {
+                expression { return params.STATUS == 'UP' }
+            }
+            steps {
+                script {
+                    def projectId = C_MY_OBJECT.global.project_id
+                    def logSinks = ['system-error-logs', 'application-logs','_Default']
+                    for (sink in logSinks) {
+                        def disabled = sh(returnStdout: true, script: "gcloud logging sinks describe ${sink} --project=${projectId} --format='table[no-heading](disabled)'").trim()
+                        if (disabled == 'true') {
+                            sh(returnStdout: true, script: "gcloud logging sinks update ${sink} --enabled --project=${projectId}")
+                            print("Log sink ${sink} in project ${projectId} is enabled! ")
+                        } else {
+                            print("Log sink ${sink} in project ${projectId} is already enabled and nothing to do")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Jenkins Log Sink Disable build: ${env.BUILD_TAG} for GCP: ${C_MY_OBJECT.global.project_id} Failed."
+        }
+    }
+}

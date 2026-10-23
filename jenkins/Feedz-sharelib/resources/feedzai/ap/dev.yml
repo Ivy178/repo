@@ -1,0 +1,54 @@
+global:
+  environment: "Dev"
+  project_id: "hsbc-11941970-feedzaiap-dev"
+  shared_project_id: "hsbc-6320774-vpchost-asia-dev"
+  region: "asia-east2"
+  zone: "asia-east2-b"
+  kms_project: "hsbc-6320774-kms-dev"
+  xmatters_api_host: "alertapi-uat-systems.uk.hsbc"
+  xmatters_api_id: ""
+  gcp_proxy: "googleapis-dev-gcp.cloud.hk.hsbc"
+  gcp_proj_number: "485643799467"
+
+networking:
+  shared_network_name: "hsbc-6320774-vpchost-asia-dev-cinternal-vpc1"
+  shared_network_subnet: "cinternal-vpc1-asia-east2"
+  default_hash_network_name: "hsbc-default-network"
+  cinternal_network_name: "hsbc-11941970-feedzaiap-dev-cinternal-vpc1"
+  networkRegion: "asia"
+
+gce:
+  base_image_project: "hsbc-6320774-distcompute-prod"
+  base_image_family: "gce-rhel7-ver2-stage2"
+  default_subnet: "net1-asia-east2"
+  kms_ring: "computeEngine"
+  global_access_fw: "tt-6320774-vpchost-eu-cinternal-dm-a-1-ssh","fwtag-all-dev-inout-ccs-collectors-production","fwtag-all-dev-out-alm-github","fwtag-all-dev-out-alm-nexus-2-production",
+    "fwtag-all-dev-out-alm-gbm-nexus-production","fwtag-all-dev-out-gl-repo","fwtag-cloudsql-access","fwtag-gke-service-access","fwtag-gke-nodepool"
+  gmltest_scanner_fw: "fwtag-all-dev-inout-ccs-collectors-production","fwtag-all-dev-inout-promotion-collectors-production","fwtag-all-dev-in-nessus-scanner","hsbc-ccs11-ingress","fwtag-all-dev-out-gl-repo",
+    "linux-pets","tt-6320774-vpchost-asia-cinternal-dm-a-1-ssh"
+  hsbc_kms_key: "HSBComputeEngine"
+  kms_key: "computeEngine"
+
+gke:
+  # Need to be updated when gke is up and running
+  cluster_name: "gke-t2-3d9628"
+  # Need to be updated when kubectl proxy is up and running.. Might want to add DNS record creation to use DNS instead of IP
+  kubectl_proxy: "10.91.14.9"
+  storageClasses: ["standard-raw-cmek"]
+
+sa_rotation:
+  # Jenkins Credentials ID : SA name
+  jenkins-cicd-tooling: jenkins-cicd-tooling
+  terraform-deployer: terraform-deployer
+  gce-stage3-image-builder-dev: gce-stage3-image-builder
+
+sa_parallel:
+  # Jenkins Credentials ID : SA name
+  terraform-deployer-dev-ap: terraform-deployer
+  # gce-stage3-image-builder-dev: gce-stage3-image-builder
+
+repositories:
+  packer: "https://alm-github.systems.uk.hsbc/IranFraud-Feedzai/Imagebuild-AP.git"
+  docker: "https://alm-github.systems.uk.hsbc/IranFraud-Feedzai/Imagebuild-AP.git"
+  imageFactory: "https://alm-github.systems.uk.hsbc/IranFraud-Feedzai-Image-Factory.git"
+  infrastructure: "https://alm-github.systems.uk.hsbc/IranFraud-Feedzai/infrastructure-AP.git"

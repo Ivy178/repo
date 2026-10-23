@@ -1,0 +1,98 @@
+# 按 workload 分组
+通用应用节点池
+数据库节点池
+GPU 节点池
+高内存节点池
+Spot 节点池
+
+# 使用不同机器类型
+CPU 数量
+内存大小
+GPU 类型
+磁盘类型
+节点规格
+
+
+# 控制 Pod 调度
+通过以下配置将 Pod 调度到指定节点池:
+Label 和 nodeSelector
+Node Affinity
+Taint 和 Toleration
+
+
+# 独立设置自动伸缩
+每个节点池可以配置不同的:
+最小节点数
+最大节点数
+自动伸缩策略
+
+
+# 实现隔离和成本优化
+可以将关键业务和普通业务分开,避免相互争抢资源;也可以让非关键任务使用 Spot 节点,从而降低成本。
+示例
+普通节点池     -> Web/API 服务
+高内存节点池   -> 大数据处理
+GPU 节点池     -> AI/机器学习任务
+Spot 节点池    -> 批处理、可重试任务
+
+
+1. nodeSelector(简单硬约束)
+Pod 级配置,精确匹配节点标签,所有标签必须全部满足才能调度。
+spec:
+  nodeSelector:
+    disktype: ssd        # 仅调度到带有 disktype=ssd 标签的节点
+    env: production
+
+
+
+
+2. Node Affinity(节点亲和,灵活约束)
+支持硬约束(必须满足)、软约束(优先满足),支持多表达式逻辑匹配。
+spec:
+  affinity:
+    nodeAffinity:
+      # 硬约束:必须满足,否则调度失败
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: zone
+            operator: In
+            values: ["az-1a", "az-1b"]
+      # 软约束:优先调度到匹配节点,不满足也可调度
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values: ["ssd"]
+
+IgnoredDuringExecution:调度完成后节点标签变化,不会驱逐已运行的 Pod
+
+
+
+3. Taint(节点污点,节点侧排斥)
+节点级配置,主动排斥所有 Pod,无对应容忍则无法调度。
+
+# 给节点打污点格式:key=value:effect
+kubectl taint nodes node-1 dedicated=monitoring:NoSchedule
+
+三种污点效果(effect):
+NoSchedule:硬排斥,新 Pod 不能调度,已有 Pod 不受影响
+PreferNoSchedule:软排斥,尽量不调度,非强制
+NoExecute:硬排斥 + 驱逐,新 Pod 不能调度,已有 Pod 无对应容忍则被驱逐
+
+# Toleration
+Pod 级配置，声明可匹配对应污点，允许调度到污点节点。
+yaml
+spec:
+  tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "monitoring"
+    effect: "NoSchedule"
+
+
+nodeSelector / Node Affinity 是Pod 主动选节点,正向筛选;Taint / Toleration 是节点主动拒 Pod,反向隔离
+nodeSelector 简单,Node Affinity 功能强,支持软硬约束和复杂逻辑;
+Taint&Toleration 是节点维度的资源隔离,通常和亲和能力配合,实现专用节点池的精准调度

@@ -1,0 +1,54 @@
+这是一个基于 Prometheus Adapter 的完整配置示例，适用于大多数Kubernetes集群。
+
+1. 应用暴露QPS指标
+你的应用需要暴露一个Prometheus格式的计数器，比如 http_requests_total。
+
+
+
+
+2. 配置Prometheus Adapter规则
+在Prometheus Adapter的ConfigMap中，添加一条规则，将计数器转换成HPA能识别的 每秒速率（QPS） ：
+
+```yaml
+rules:
+- seriesQuery: 'http_requests_total{namespace!="",pod!=""}'
+  resources:
+    overrides:
+      namespace: {resource: "namespace"}
+      pod: {resource: "pod"}
+  name:
+    matches: "^(.*)_total$"
+    as: "${1}_per_second"
+  metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
+```
+这条规则的意思是：找到 http_requests_total 指标，用 rate 函数计算2分钟内的每秒速率，并重命名为 http_requests_per_second。
+
+
+
+
+
+3. 创建HPA
+HPA引用上面生成的指标，设定每个Pod的目标QPS：
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: qps-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-webapp
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+
+averageValue: "100" 表示每个Pod平均每秒处理100个请求是目标值。HPA会独立计算每个指标建议的副本数，并取最大值作为最终扩缩容目标。

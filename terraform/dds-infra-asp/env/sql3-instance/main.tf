@@ -1,0 +1,24 @@
+module "postgresql-instance" {
+  source            = "../../modules/sql-instance"
+  name              = var.name
+  private_network   = var.private_network
+  project           = var.project
+  database_version  = var.database_version
+  edition           = var.edition
+  region            = var.region
+  zone              = var.zone
+  env               = var.env
+  kms_key_name      = var.kms_key_name
+  disk_size         = var.disk_size
+  disk_type         = var.disk_type
+  delete_protection = var.delete_protection
+  database_flags    = var.database_flags
+  backup_enabled    = var.backup_enabled
+  availability_type = var.availability_type
+  tier              = var.tier
+  disk_autoresize   = var.disk_autoresize
+  ip_v4             = var.ip_v4
+  user_labels       = var.user_labels
+  db_names          = var.db_names
+  iam_user_emails   = var.iam_user_emails
+}

@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "prometheus.fullname" . }}
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "prometheus.selectorLabels" . | nindent 6 }}
+  {{- toYaml .Values.podDisruptionBudget | nindent 2 }}

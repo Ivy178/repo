@@ -1,0 +1,159 @@
+{
+  "fields": [
+    {
+      "name": "error",
+      "mode": "NULLABLE",
+      "type": "STRING",
+      "description": "",
+      "fields": []
+    },
+    {
+      "name": "failed_row",
+      "mode": "NULLABLE",
+      "type": "RECORD",
+      "description": "",
+      "fields": [
+        {
+          "name": "IVL_PTY_ID",
+          "mode": "NULLABLE",
+          "type": "INTEGER",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "cpd_status_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur447_mob24_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva743_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva610_woe_v3",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva311_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "BUR683_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur626_woe_v1",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva931_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva933_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur479_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "AOVLLCRBAL3_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur677_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva620_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "int90_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur207_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "bur541_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "chrva712_woe",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "AOVLLCRBAL6_woe_v2",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        },
+        {
+          "name": "BURD648_woe_v5",
+          "mode": "",
+          "type": "FLOAT",
+          "description": "",
+          "fields": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+@Library('dds_gcp_shared_libraries@feature/infra-spec') _
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"10")),
+    //0 1 * *  BUSINESS_REGION=ASP, GB,MENA, East ASP, Core; ENVIRONMENT_NAME=dev,sit,uat,preprod,prod;
+    pipelineTriggers ([
+        parameterizedCron('''
+            0 14 * * 1-5 % action=destroy;ENVIRONMENT_NAME=dev;BUSINESS_REGION=asp;directory=migs/mig-airflow3;TF_EXEC_MODE=sa;
+            0 15 * * 1-5 % action=destroy;ENVIRONMENT_NAME=uat;BUSINESS_REGION=asp;directory=migs/mig-airflow3;TF_EXEC_MODE=sa;
+            0 1 * * 1-5 % action=apply;ENVIRONMENT_NAME=dev;BUSINESS_REGION=asp;directory=migs/mig-airflow3;TF_EXEC_MODE=sa;
+            0 1 * * 1-5 % action=apply;ENVIRONMENT_NAME=uat;BUSINESS_REGION=asp;directory=migs/mig-airflow3;TF_EXEC_MODE=sa;
+        ''')
+    ]),
+
+    parameters([
+        choice(name: 'giturl', choices: ['https://alm-github.systems.uk.hsbc/CCS-DecisionDataStore/dds-infra-asp.git'], description: 'Choose the github url to fetch the code'),
+        choice(name: 'action', choices: ['plan', 'apply', 'destroy'], description: 'Select terraform action'),
+        choice(name: 'ENVIRONMENT_NAME', choices: ['dev', 'uat'], description: ""),
+        choice(name: 'BUSINESS_REGION', choices: ["asp"], description: "Business region given configuration work for"),
+        choice(
+            name: "directory",
+            choices: [
+                "migs/mig-airflow",
+                "env/gcs-ddsdatadbtasp",
+                "env/secrets3_serviceacc",
+                "env/sql-instance",
+                "env/gcs-airflowlog",
+                "logging",
+                "monitoring_dashboard",
+                "monitoring_alert_policy",
+                "migs/mig-airflow3",
+                "env/sql3-instance",
+                "env/secrets3_serviceacc",
+                "env/gcs3-ddsdatadbtasp",
+                "env/gcs3-airflowlog"
+            ],
+            description: "Enter the relative folder path of terraform scrips ex: env/bigquery"
+        ),
+        string(name: 'tagname', defaultValue: 'feature/airflow3.2.2', description: 'tag name'),
+        choice(name: 'TF_EXEC_MODE', choices: ['sa', 'token'], description: 'change mode to TOKEN, if create for env infra with token'),
+        password(name: 'MYTOKEN', '', description: 'access token by running \'gcloud auth print-access-token\'')
+    ])
+])
+
+static final String C_CONFIG_ID = "${env.BUILD_TAG}".toLowerCase().replace("jenkins-", "").replace("(", "-").replace("_", "-").replace(" ", "-")
+static final String C_CONFIG_YML_FILE = "${params.ENVIRONMENT_NAME.toLowerCase()}.yml"
+def sourceContent = libraryResource "dds/${params.BUSINESS_REGION.toLowerCase()}/${C_CONFIG_YML_FILE}"
+def C_MY_OBJECT = readYaml text: "${sourceContent}"
+def proxyAddress = C_MY_OBJECT.global.gcp_proxy
+def tfBackend = C_MY_OBJECT.global.tf_backend
+def tfInput = C_MY_OBJECT.global.tf_input
+
+pipeline {
+    agent { label 'cm-linux' }
+
+    environment {
+        GOOGLE_APPLICATION_CREDENTIALS = "${env.WORKSPACE}/target_key.json"
+        CLOUDSDK_CONFIG = "${WORKSPACE}/.config"
+        HTTPS_PROXY="${proxyAddress}:3128"
+        HTTP_PROXY="${proxyAddress}:3128"
+        NO_PROXY="127.0.0.1,localhost,.hsbc"
+        https_proxy="${proxyAddress}:3128"
+        http_proxy="${proxyAddress}:3128"
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps{
+                script {
+                    // via terraform sa key to connect with gcp project.
+                    key = "terraform-sa-${params.ENVIRONMENT_NAME.toLowerCase()}-${params.BUSINESS_REGION.toLowerCase()}"
+                    echo "Using key: ${key} to connect to GCP project: ${C_MY_OBJECT.global.project_id}"
+
+                    withCredentials([file(credentialsId: key, variable: 'GCP_KEY')]){
+                        sh(script: 'cat ${GCP_KEY} > /target_key.json', returnStdout: false)
+                        sh(returnStdout: true, script: "gcloud config configurations create provision-${C_CONFIG_ID}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/type http_no_tunnel")
+                        sh(returnStdout: true, script: "gcloud config set proxy/address ${C_MY_OBJECT.global.gcp_proxy}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/port 3128")
+                        sh(returnStdout: true, script: "gcloud auth activate-service-account --key-file=target_key.json")
+                        sh(script: "gcloud config set project '${C_MY_OBJECT.global.project_id}' --configuration='provision-${C_CONFIG_ID}'", returnStdout: false)
+                    }
+                }
+
+                wrap([$class: 'BuildUser']) {
+                    addBadge(text: "Build by - ${env.BUILD_USER ?: env.BUILD_USER_ID ?: 'CICD Build'}", cssClass: 'badge-text--background jenkins-!-color-purple')
+                    addBadge(text: "Env - ${params.ENVIRONMENT_NAME}", cssClass: 'badge-text--background jenkins-!-color-teal')
+                    addBadge(text: "Region - ${params.BUSINESS_REGION}", cssClass: 'badge-text--background jenkins-!-color-indigo')
+                    addBadge(text: "Dir - ${params.directory}", cssClass: 'badge-text--background jenkins-!-color-orange')
+                    addBadge(text: "Mode - ${params.TF_EXEC_MODE}", cssClass: 'badge-text--background jenkins-!-color-green')
+                    addBadge(text: "Action - ${params.action}", cssClass: 'badge-text--background jenkins-!-color-yellow')
+                }
+            }
+        }
+
+        stage('VersionPrint Stage:Git and Terraform ') {
+            steps {
+                script {
+                    timestamps {
+                        sh 'export GIT_PATH="/usr/bin/git"'
+                    }
+                }
+            }
+        }
+
+        stage('git cloning repo') {
+            steps {
+                checkout scm: [
+                    $class: 'GitSCM',
+                    userRemoteConfigs: [[url: "${params.giturl}", credentialsId: 'GitHub_Cred_Token']],
+                    branches: [[name: "${params.tagname}"]]
+                ], poll: false
+            }
+        }
+
+        stage('terraform init and plan') {
+            environment {
+                HTTPS_PROXY="${C_MY_OBJECT.global.gcp_proxy}:3128"
+            }
+            when {
+                expression { params.TF_EXEC_MODE == 'sa' }
+            }
+
+            steps {
+                script {
+                    dir("${params.directory}") {
+                        withCredentials([file(credentialsId: 'TERRAFORMC', variable: 'TF_CLI_CONFIG_FILE')]) {
+                            sh """
+                                set -e
+                                ls -lrt
+                                if [[ "${params.directory}" == "gcs-backend" ]]; then
+                                    terraform init
+                                    terraform plan -var-file=${tfInput} -out=config.plan
+                                else
+                                    terraform init --backend-config=${tfBackend} -reconfigure    // -reconfigure：强制重新配置后端，忽略之前保存的后端配置。
+                                    terraform plan -var-file=${tfInput} -out=config.plan
+                                fi
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('terraform apply') {
+            when {
+                expression { params.TF_EXEC_MODE == 'sa' && params.action == 'apply' }
+            }
+            steps {
+                script {
+                    dir("${params.directory}") {
+                        withCredentials([file(credentialsId: 'TERRAFORMC', variable: 'TF_CLI_CONFIG_FILE')]) {
+                            sh """
+                                set -e
+                                ls -lrt
+                                terraform apply config.plan
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('terraform destroy') {
+            when {
+                expression { params.TF_EXEC_MODE == 'sa' && params.action == 'destroy' }
+            }
+            steps {
+                script {
+                    dir("${params.directory}") {
+                        withCredentials([file(credentialsId: 'TERRAFORMC', variable: 'TF_CLI_CONFIG_FILE')]) {
+                            sh """
+                                set -e
+                                if [[ "${params.directory}" == "gcs-backend" ]]; then
+                                    terraform init
+                                    terraform destroy -var-file=${tfInput} -auto-approve
+                                else
+                                    terraform init --backend-config=${tfBackend} -reconfigure
+                                    terraform destroy -var-file=${tfInput} -auto-approve
+                                fi
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        //start of stage
+        stage('terraform execute with token ') {
+            environment {
+                HTTPS_PROXY = "${C_MY_OBJECT.global.gcp_proxy}:3128"
+            }
+            when {
+                expression { params.TF_EXEC_MODE == 'token' }
+            }
+            steps {
+                script {
+                    dir("${params.directory}") {
+                        wrap([$class: "MaskPasswordsBuildWrapper", varPasswordPairs: [[password: MYTOKEN]]]) {
+                            withCredentials([file(credentialsId: 'TERRAFORMC', variable: 'TF_CLI_CONFIG_FILE')]) {
+                                sh """
+                                    set -e
+                                    ls -lrt
+
+                                    # init
+                                    if [[ "${params.directory}" == "gcs-backend" ]]; then
+                                      terraform init
+                                    else
+                                      terraform init --backend-config=${tfBackend} -backend-config="access_token=\$MYTOKEN" -reconfigure
+                                    fi
+
+                                    # action dispatch
+                                    if [[ "${params.action}" == "plan" ]]; then
+                                      terraform plan -var "auth_token=\$MYTOKEN" -var-file=${tfInput} -out=config.plan
+
+                                    elif [[ "${params.action}" == "apply" ]]; then
+                                      terraform plan -var "auth_token=\$MYTOKEN" -var-file=${tfInput} -out=config.plan
+                                      terraform apply config.plan
+
+                                    elif [[ "${params.action}" == "destroy" ]]; then
+                                      terraform destroy -var "auth_token=\$MYTOKEN" -var-file=${tfInput} -auto-approve
+
+                                    else
+                                      echo "Unsupported action: ${params.action}"
+                                      exit 1
+                                    fi
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

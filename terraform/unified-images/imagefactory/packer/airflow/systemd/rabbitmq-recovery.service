@@ -1,0 +1,17 @@
+[Unit]
+Description=Airflow Celery Flower UI
+After=network-online.target NetworkManager.service env-configure.service cloud-sql-proxy.service airflow-scheduler.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Group=root
+Type=simple
+ExecStartPre=chmod +x /usr/local/sbin/recovery.sh
+ExecStart=/bin/bash /usr/local/sbin/recovery.sh
+Restart=always
+RestartSec=5s
+ 
+[Install]
+WantedBy=multi-user.target

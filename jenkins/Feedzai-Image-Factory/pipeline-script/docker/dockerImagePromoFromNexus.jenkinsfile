@@ -1,0 +1,118 @@
+// Static parameters for build
+static final String C_CONFIG_ID = "${env.BUILD_TAG}".toLowerCase().replace('jenkins-','').replace('_', '-').replace(' ', '')
+static final String C_CONFIG_JSON_FILE_PATH = './config.json'
+
+def getAuthority(String uri) {
+    return uri.split('/')[0]
+}
+
+def requireTaggedOciUri(String uri, String paramName) {
+    String value = (uri ?: '').trim()
+    int firstSlash = value.indexOf('/')
+    int lastSlash = value.lastIndexOf('/')
+    int lastColon = value.lastIndexOf(':')
+
+    if (!value || firstSlash < 0 || lastColon <= lastSlash || lastColon == value.length() - 1) {
+        error("""
+Invalid ${paramName}: '${value}'
+Expected format: <registry>/<repository>:<tag>
+Please include the image tag (version) in the URI.
+Example container URI:
+nexus3.hk.hsbc:18080/hsbc-12738076-feedzaist-tools/secrets-manager:1.0.10
+Example Helm OCI URI:
+nexus3-uat.systems.uk.hsbc:47228/vmw-app-catalog/hosted-registry-daa9d1b7dd2/charts/photon-5/grafana:12.1.14
+""")
+    }
+    return value
+}
+
+def getRepoAndTag(String uri) {                   // 截取repo和tag，返回一个map对象
+    int firstSlash = uri.indexOf('/')
+    int lastColon = uri.lastIndexOf(':')
+    return [                                                 //nexus3.hk.hsbc:18080/team/app/image:1.8.18
+        repo: uri.substring(firstSlash + 1, lastColon),      //截取第一个 / 后、最后一个 : 前的内容。   
+        tag : uri.substring(lastColon + 1)                 
+    ]
+}
+
+properties([
+    parameters([
+        choice(name: 'ENVIRONMENT_NAME', choices: ['QA', 'DEV', 'PRE-PROD', 'PROD'], description: 'Env of target artifact registry repo'),
+        choice(name: 'BUSINESS_REGION', choices: ['AP', 'UK', 'HK', 'US', 'APM', 'HASE', 'APST', 'INDIA', 'INDIA-APMA', 'EMEA', 'HSBCHET'], description: 'Business region of target artifact registry repo'),
+        string(name: 'SRC_IMAGE_URI', defaultValue: '', description: 'Source OCI artifact Repository (container image or Helm chart), normally it is Nexus, e.g. nexus3.hk.hsbc:18080/hsbc-12738076-feedzaist-tools/secrets-manager:1.8.18      OR    nexus3-uat.systems.uk.hsbc:47228/vmw-app-catalog/hosted-registry-daa9d1b7dd2/containers/photon-5/zookeeper:3.8.4-photon-5-r63 OR nexus3-uat.systems.uk.hsbc:47228/vmw-app-catalog/hosted-registry-daa9d1b7dd2/charts/photon-5/grafana:12.1.14'),
+        string(name: 'DST_IMAGE_URI', defaultValue: '', description: 'Destination OCI artifact Repository (container image or Helm chart), can be Nexus or Artifact Registry, e.g. nexus3.hk.hsbc:18080/hsbc-12738076-feedzaist-tools/bitnami/cassandra:4.1.10-photon-5-r0 OR asia-east2-docker-pkg.dev/hsbc-12738076-feedzaistqa-dev-ar-container-repo/secrets-manager:1.0.10-promotion-test2 OR nexus3.hk.hsbc:18080/hsbc-12738076-feedzaist-tools/bitnami/charts/grafana:12.1.14')
+    ])
+])
+
+pipeline {
+    agent {
+        node { label 'cm-linux' }
+    }
+    options {
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    environment {
+        GOOGLE_APPLICATION_CREDENTIALS = "${env.WORKSPACE}/target_key.json"
+        NO_PROXY = '.hsbc'
+        SRC_REGISTRY = getAuthority("${SRC_IMAGE_URI}")
+        DES_REGISTRY = getAuthority("${DST_IMAGE_URI}")
+    }
+
+    stages {
+        stage('Prepare GCP Configs') {
+            steps {
+                withCredentials([file(credentialsId: "terraform-deployer-${ENVIRONMENT_NAME.toLowerCase()}-${BUSINESS_REGION.toLowerCase()}", variable: 'GCP_KEY')]) {
+                    sh(script: 'cp $GCP_KEY ./target_key.json', returnStdout: false)
+                }
+            }
+        }
+
+        stage('Push image to Artifact Registry ') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'GB-TrnFrd-G-Dops', usernameVariable: 'NEXUS3_SERVICEACC_USERNAME', passwordVariable: 'NEXUS3_SERVICEACC_TOKEN')]) {
+                    script {
+                        addBadge(text: "Env - ${params.ENVIRONMENT_NAME}", cssClass: 'badge-text--background jenkins-!-color-teal')
+                        addBadge(text: "Region - ${params.BUSINESS_REGION}", cssClass: 'badge-text--background jenkins-!-color-indigo')
+                        addBadge(text: "Source - ${params.SRC_IMAGE_URI}", cssClass: 'badge-text--background jenkins-!-color-orange')
+                        addBadge(text: "Destination - ${params.DST_IMAGE_URI}", cssClass: 'badge-text--background jenkins-!-color-yellow')
+
+                        def api_env = (['DEV', 'QA'].contains(params.ENVIRONMENT_NAME)) ? 'dev' : 'prod'
+                        def validatedSrcImageUri = requireTaggedOciUri(params.SRC_IMAGE_URI, 'SRC_IMAGE_URI')
+                        def validatedDstImageUri = requireTaggedOciUri(params.DST_IMAGE_URI, 'DST_IMAGE_URI')
+                        def dstImageRef = getRepoAndTag(validatedDstImageUri)
+
+                        //if it's from nexus-uat to nexus, we need to use other credential, and also trigger CONT scan
+                        if ("${DES_REGISTRY}".contains('nexus')) {
+                            sh 'gcrane auth login ${DES_REGISTRY} -u ${NEXUS3_SERVICEACC_USERNAME} -p ${NEXUS3_SERVICEACC_TOKEN}'
+
+                            wrap([$class: 'BuildUser']) {
+                                build job: 'docker_image_scan',
+                                parameters: [
+                                    string(name: 'IMAGE', value: dstImageRef.repo),
+                                    string(name: 'TAG', value: dstImageRef.tag),
+                                    string(name: 'SEND_SCAN_REPORT_TO', value: env.BUILD_USER_ID)
+                                ],
+                                wait: false,
+                                quietPeriod: 120 // delay in seconds
+                            }
+                        }
+
+                        sh """
+                            export HTTPS_PROXY=http://googleapis-${api_env}.gcp.cloud.hk.hsbc:3128
+                            echo \${HTTPS_PROXY}
+                            echo \${NO_PROXY}
+                            gcloud auth activate-service-account --key-file=./target_key.json
+                            gcrane auth login ${SRC_REGISTRY} -u ${NEXUS3_SERVICEACC_USERNAME} -p ${NEXUS3_SERVICEACC_TOKEN}    //登录nexus3仓库
+
+                            gcrane cp ${validatedSrcImageUri} ${validatedDstImageUri}
+                        """
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+//延迟 120 秒后再启动下游 Jenkins job，避免瞬时并发和让镜像复制完成后再开始扫描。

@@ -1,0 +1,16 @@
+@library('feeds_gcp_shared_libraries@main')
+properties([
+buildDiscarder(logRotator(numToKeepStr:'10')),
+parameters([
+choice(name: 'ENVIRONMENT_NAME', choices: ['QA','DEV'], description: ''),
+choice(name: 'BUSINESS_REGION', choices: ["AP", "UK", "WASE", "APST", "INDIA", "EMEA", "ISBCHET","APIM", "US", "MX", "INDIA‑RMA"], description: "Business region given configuration work for"),
+string(name: 'TARGET_VM_TO_DESTROY', defaultValue: '', description: 'Name of the VM to be destroyed', trim: true)
+])
+])
+ 
+shutdownVMByName(
+ENVIRONMENT_NAME: "{ENVIRONMENT_NAME}",
+BUSINESS_REGION: "{BUSINESS_REGION}",
+GCP_TERRAFORM_SA_KEY: "terraform‑deployer‑{ENVIRONMENT_NAME.toLowerCase()}-{BUSINESS_REGION.toLowerCase()}",
+TARGET_VM_TO_DESTROY: "${TARGET_VM_TO_DESTROY}"
+)

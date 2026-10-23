@@ -1,0 +1,59 @@
+terminationGracePeriodSeconds: 10
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+tsdbRetentionTime: 90d
+prometheusListeningPort: 9090
+loadBalanceExposePort: 9090
+
+feedzaiMetricsAddress: telegraf-hase.hase-monitoring.svc.cluster.local:8080
+etlMetricsAddress: telegraf-hase.hase-monitoring.svc.cluster.local:8083
+
+cmMetricsAddress0: telegraf-hase.hase-monitoring.svc.cluster.local:8084
+cmMetricsAddress1: telegraf-hase.hase-monitoring.svc.cluster.local:8085
+cmMetricsAddress2: telegraf-hase.hase-monitoring.svc.cluster.local:8086
+
+pulseMetricsAddress0: telegraf-hase.hase-monitoring.svc.cluster.local:8087
+pulseMetricsAddress1: telegraf-hase.hase-monitoring.svc.cluster.local:8088
+pulseMetricsAddress2: telegraf-hase.hase-monitoring.svc.cluster.local:8089
+pulseMetricsAddress3: telegraf-hase.hase-monitoring.svc.cluster.local:8093
+pulseMetricsAddress4: telegraf-hase.hase-monitoring.svc.cluster.local:8094
+pulseMetricsAddress5: telegraf-hase.hase-monitoring.svc.cluster.local:8095
+pulseLBMetricsAddress: telegraf-hase.hase-monitoring.svc.cluster.local:8090
+
+pulseinblueaddress0: telegraf-hase.hase-monitoring.svc.cluster.local:8096
+pulseinblueaddress1: telegraf-hase.hase-monitoring.svc.cluster.local:8097
+pulseinblueaddress2: telegraf-hase.hase-monitoring.svc.cluster.local:8098
+
+pulseingreenaddress0: telegraf-hase.hase-monitoring.svc.cluster.local:8099
+pulseingreenaddress1: telegraf-hase.hase-monitoring.svc.cluster.local:8100
+pulseingreenaddress2: telegraf-hase.hase-monitoring.svc.cluster.local:8101
+
+pulsenewlb: telegraf-hase.hase-monitoring.svc.cluster.local:8102
+etlInbLB: telegraf-hase.hase-monitoring.svc.cluster.local:8103
+
+logLevel: warn
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /-/healthy
+    port: 9090
+  initialDelaySeconds: 0
+  timeoutSeconds: 5
+
+# Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /-/ready
+    port: 9090
+  initialDelaySeconds: 30
+  timeoutSeconds: 5

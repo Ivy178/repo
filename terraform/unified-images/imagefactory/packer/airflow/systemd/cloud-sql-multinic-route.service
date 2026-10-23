@@ -1,0 +1,16 @@
+[Unit]
+Description=MultiNIC routing for CloudSQL setup
+After=network-online.target NetworkManager.service env-configure.service
+PartOf=network-online.target NetworkManager.service
+ 
+[Service]
+Environment="NIC1_GW=$(/bin/curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/1/gateway | /bin/head -1 )"
+User=root
+Type=oneshot
+ExecStart=/bin/bash -c "route add -net 192.168.0.0/16 gw ${NIC1_GW}"
+RemainAfterExit=true
+StandardOutput=syslog
+StandardError=syslog
+ 
+[Install]
+WantedBy=multi-user.target

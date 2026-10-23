@@ -1,0 +1,152 @@
+# playbooks/patching.yml
+---
+-name:系统补丁更新-预检查
+hosts:"{{ target_hosts | default('all') }}"
+gather_facts:yes
+serial:"{{ batch_size | default(50) }}"
+
+tasks:
+-name:检查磁盘空间        //这段任务想检查每台目标主机的根分区可用空间是否大于 1 GiB：
+assert:
+that:
+-ansible_mounts|selectattr('mount','equalto','/')|map(attribute='size_available')|first|int>1073741824
+fail_msg:"根分区剩余空间不足 1GB,跳过此主机"
+tags:precheck       //便于按标签运行或跳过。
+
+-name:检查系统负载
+assert:
+that:
+-ansible_processor_vcpus>0
+-(ansible_load_average.1/ansible_processor_vcpus)<2.0
+fail_msg:"系统负载过高，跳过此主机"
+tags:precheck
+
+
+-name:记录更新前的包版本
+shell:|
+        rpm -qa --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' | sort > /tmp/packages_before_{{ ansible_date_time.date }}.txt
+when:ansible_os_family=="RedHat"
+tags:precheck
+
+-name:系统补丁更新-执行更新
+hosts:"{{ target_hosts | default('all') }}"         
+gather_facts:yes                               // 执行前收集目标主机的信息，例如操作系统、CPU 和时间等 facts，后续任务可以引用这些信息。when: ansible_os_family == "RedHat"
+serial:"{{ batch_size | default(50) }}"       //滚动执行，每批最多处理 50 台主机
+max_fail_percentage:10
+
+pre_tasks:
+-name:发送开始通知
+ uri:
+   url:"{{ notification.webhook_url }}"
+   method:POST
+   body_format:json
+   body:
+      msgtype:"text"
+      text:
+        content:"补丁更新开始: {{ inventory_hostname }} (批次 {{ ansible_play_batch }})"           //serial=50, 因此通知任务通常会在每个滚动批次执行一次，而不是每台主机执行一次。
+delegate_to:localhost          //通知请求由 Ansible 控制节点发送，而不是由目标服务器发送。
+when:notification.enabled|default(false)
+ignore_errors:yes          //即使通知任务失败，也尝试继续后续任务。
+run_once:yes               // run_once 配合 serial 时每批会通知一次
+
+
+tasks:
+-name: 更新YUM缓存
+yum:
+update_cache:yes
+when:ansible_os_family=="RedHat"
+
+-name: 安装安全补丁(RHEL/CentOS)
+yum:
+name:'*'
+state:latest
+security:"{{ patching.security_only | default(true) }}"
+exclude:"{{ patching.exclude_packages | default([]) }}"
+register:yum_result                                             //把任务执行结果存入变量 yum_result，供后续任务判断或查看。
+when:ansible_os_family=="RedHat"
+
+-name: 更新APT缓存
+apt:             //更新 Ubuntu/Debian 软件包索引
+update_cache:yes
+cache_valid_time:3600
+when:ansible_os_family=="Debian"
+
+-name: 安装安全补丁(Ubuntu/Debian)
+apt:
+upgrade:dist
+update_cache:yes
+register:apt_result
+when:ansible_os_family=="Debian"
+
+-name: 检查是否需要重启
+stat:                              # stat 模块只检查文件是否存在，结果保存到reboot_required_file
+path:/var/run/reboot-required
+register:reboot_required_file
+when:ansible_os_family=="Debian"
+
+-name: 检查是否需要重启(RHEL)
+command: needs-restarting -r           # 用来判断是否有进程仍使用旧版本库或旧内核。
+register: needs_restarting
+failed_when: false                    //无论命令返回什么退出码，都不把任务标记为失败。这里的检查即使命令返回非零，也允许 Playbook 继续执行
+changed_when: false                    //表示无论命令结果如何，都把任务报告为 ok（未更改），而不是 changed    
+when:ansible_os_family=="RedHat"
+
+-name:设置重启标志
+set_fact:
+needs_reboot:>-
+          {{ (ansible_os_family == "Debian" and reboot_required_file.stat.exists | default(false)) or
+             (ansible_os_family == "RedHat" and needs_restarting.rc == 1) }}
+
+-name:重启服务器
+reboot:                                                                   // reboot 模块用于重启目标主机
+reboot_timeout:"{{ patching.reboot_timeout | default(600) }}"            //等待重启完成的最长时间，默认 600 秒。
+pre_reboot_delay:"{{ patching.reboot_delay | default(30) }}"             // 重启前等待时间，默认 30 秒。
+post_reboot_delay:30                                                     // 重启后等待时间，默认 30 秒。
+msg:"Ansible 补丁更新后重启"
+when:                   # and
+-needs_reboot|default(false)
+-patching.allow_reboot|default(true)
+
+-name:等待服务恢复
+wait_for:
+  port:"{{ item }}"               // loop配合。循环端口
+  timeout:120
+loop:"{{ service_ports | default([22]) }}"       
+when:needs_reboot|default(false)
+
+
+
+post_tasks:
+-name:记录更新后的包版本
+shell:|
+        rpm -qa --queryformat '%{NAME}-%{VERSION}-%{RELEASE}\n' | sort > /tmp/packages_after_{{ ansible_date_time.date }}.txt
+        diff /tmp/packages_before_{{ ansible_date_time.date }}.txt /tmp/packages_after_{{ ansible_date_time.date }}.txt > /tmp/packages_diff_{{ ansible_date_time.date }}.txt || true
+when:ansible_os_family=="RedHat"
+
+
+
+
+-name:健康检查
+uri:
+url:"http://localhost:{{ health_check_port | default(8080) }}/health"
+status_code:200
+timeout:30
+register:health_check
+retries:3
+delay:10                        // 失败后最多重试 3 次，每次间隔 10 秒
+until:health_check.status==200  // 等待健康检查返回 200 状态码
+when:health_check_port is defined
+ignore_errors:yes
+
+-name:发送完成通知
+uri:
+url:"{{ notification.webhook_url }}"
+  method:POST
+  body_format:json
+  body:
+    msgtype:"text"
+    text:
+      content:"补丁更新完成: {{ inventory_hostname }} - 状态: {{ 'SUCCESS' if not (health_check.failed | default(false)) else 'FAILED' }}"
+delegate_to:localhost
+when:notification.enabled|default(false)
+ignore_errors:yes

@@ -1,0 +1,55 @@
+**Workload Identity** 是 GKE 中让 Kubernetes Pod 安全访问 Google Cloud 资源的机制。
+
+1. 解决什么问题？
+以前常见做法是把 Google Service Account 的 JSON 密钥放进 Pod：
+Pod -> 读取 JSON 密钥 -> 访问 BigQuery/GCS/Secret Manager
+
+这种方式存在密钥泄露、轮换困难和权限管理复杂等风险。
+Workload Identity 不需要在 Pod 中保存密钥，而是让 Pod 使用短期身份令牌访问 GCP 资源：
+Pod -> Kubernetes Service Account -> Google Service Account -> GCP 资源
+
+
+2. 两种 Service Account 的职责
+- **Kubernetes Service Account，KSA**：标识 Kubernetes 中的 Pod
+- **Google Service Account，GSA**：拥有访问 BigQuery、GCS、Secret Manager 等 GCP 资源的 IAM 权限
+
+通常将 KSA 与 GSA 绑定：
+KSA: app-sa
+GSA: app-sa@project-id.iam.gserviceaccount.com
+
+然后给 GSA 授予最小必要权限，例如： roles/storage.objectViewer
+这样 Pod 使用 `app-sa` 启动后，就可以读取指定 GCS 对象。
+
+
+3. 访问流程
+Pod
+  -> 使用 Kubernetes Service Account
+  -> GKE 验证并获取短期令牌
+  -> 以 Google Service Account 身份访问 GCP API
+  -> IAM 检查权限
+  -> 允许或拒绝访问
+
+Pod 本身不保存长期 JSON 密钥，令牌也会自动刷新。
+
+
+
+4. 示例配置
+给 Kubernetes Service Account 指定 GSA：
+yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: app-sa@project-id.iam.gserviceaccount.com
+
+
+Deployment 使用这个 KSA：
+spec:
+  template:
+    spec:
+      serviceAccountName: app-sa
+
+还需要配置 IAM 绑定，允许该 KSA 使用 GSA：serviceAccount:app-sa@project-id.iam.gserviceaccount.com
+并授予 GSA 访问目标资源所需的 IAM Role。

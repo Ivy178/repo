@@ -1,0 +1,28 @@
+@Library('dsx_gcp_shared_libraries@feature/unified-images') _
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"100")),
+    parameters([
+        booleanParam(name: 'DEBUG_BUILD', defaultValue: false, description: 'Run Packer in debug mode. This will prevent packer.from removing vms if build fails.'),
+        choice(name: 'BUSINESS_REGION', choices: ['ASP'], description: 'Choose the BUSINESS_REGION you want to deploy to'),
+        choice(name: 'TARGET_ENVIRONMENT', choices: ['DEV','SIT','UAT'], description: 'Choose the target env type'),
+        choice(name: 'IMAGE_NAME', choices: ['airflow','rabbitmq'], description: 'Choose the service you want to deploy to'),
+        choice(name: 'IMAGE_TYPE', choices: ['mutable','immutable'], description: 'Choose the image type you want to deploy to'),
+        choice(name: 'REPO_NAME', choices: ['https://alm-github.systems.uk.hsbc/DSX/unified-images.git'], description: 'Choose the github url to fetch the code'),
+        string(name: 'BRANCH_NAME', defaultValue: 'main', description: 'tag name'),
+        password(name: 'MYTOKEN', defaultValue: '', description: 'access token by running \'gcloud auth print-access-token\'')
+    ])
+])
+
+packerImageBuild(
+DEBUG_BUILD: params.DEBUG_BUILD,
+TARGET_ENVIRONMENT: "${params.TARGET_ENVIRONMENT}",
+BUSINESS_REGION: "${params.BUSINESS_REGION}",
+GCP_TERRAFORM_SA_KEY: "terraform-sa-${params.TARGET_ENVIRONMENT.toLowerCase()}-${params.BUSINESS_REGION.toLowerCase()}",
+GIT_CREDENTIALS: 'GitHub_Cred_Token',
+REPO_NAME: "${params.REPO_NAME}",
+GIT_BRANCH: "${params.BRANCH_NAME}",
+IMAGE_TYPE: "${params.IMAGE_TYPE}",
+IMAGE_NAME: "${params.IMAGE_NAME}",
+MYTOKEN: "${params.MYTOKEN}"
+)

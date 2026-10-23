@@ -1,0 +1,19 @@
+@Library('feedz_gcp_shared_libraries@main') _
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"10")),
+    parameters([
+        string(name: "IMAGE", defaultValue: "", description: "Docker image for CONT scan, e.g. hsbc-12738076-feedzaist-tools/bitnami/cassandra", trim: true),
+        string(name: "TAG", defaultValue: "", description: "Tag of the docker image for CONT scan", trim: true),
+        string(name: "SEND_SCAN_REPORT_TO", defaultValue: "", description: "Comma-separated list of STAFF_IDs to recieve scan report, like: GB-RANDOM-SERVICE,13371337", trim: true)
+    ])
+])
+
+dockerImageScan(
+    ENVIRONMENT_NAME: "Qa",
+    BUSINESS_REGION: "APST",
+    CYBERFLOWS_CREDENTIALS: "GB-TrnFrd-G-Dops",
+    IMAGE: "${IMAGE}",
+    TAG: "${TAG}",
+    SEND_SCAN_REPORT_TO: "${SEND_SCAN_REPORT_TO}"
+)

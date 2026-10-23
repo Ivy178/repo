@@ -1,0 +1,160 @@
+#!/usr/bin/env groovy
+def call(Map pipelineParams = [:]) {
+
+def mandatoryParams = [
+    'gcpSourceImageProjects',
+    'gcpDestinationImageProjects',
+].find { !pipelineParams."${it}" }
+if (mandatoryParams) throw new Exception("[ERROR] Missing parameter: ${mandatoryParams} is required.")
+
+def nodeLabel = pipelineParams.nodeLabel ?: 'cm-linux'
+def kms_key = ''
+def region = ''
+def appConfig = [:]
+
+pipeline {
+    agent { label(nodeLabel) }
+
+    options {
+        ansiColor('xterm')
+        timestamps()
+        timeout(time: pipelineParams.timeout ?: 120, unit: 'MINUTES')
+        buildDiscarder(logRotator(
+            numToKeepStr: "${(pipelineParams.buildDiscarder ?: [:]).numToKeepStr ?: '100'}",
+            daysToKeepStr: "${(pipelineParams.buildDiscarder ?: [:]).daysToKeepStr ?: '-1'}",
+            artifactNumToKeepStr: "${(pipelineParams.buildDiscarder ?: [:]).artifactNumToKeepStr ?: '-1'}",
+            artifactDaysToKeepStr: "${(pipelineParams.buildDiscarder ?: [:]).artifactDaysToKeepStr ?: '-1'}",
+        ))
+    }
+
+    parameters {
+        choice(name: 'SOURCE_IMAGE_PROJECT',
+            choices: pipelineParams.gcpSourceImageProjects,
+            description: 'Source GCP project where image is to be copy'
+        )
+        choice(name: 'DESTINATION_IMAGE_PROJECT',
+            choices: pipelineParams.gcpDestinationImageProjects,
+            description: 'Destination GCP project where new image is needed'
+        )
+        string(name: 'IMAGE_FAMILY', description: 'Image family')
+        string(name: 'SOURCE_IMAGE_NAME', description: '''<strong>Optional:</strong> Image name to copy to new project env. <br>
+<i>If you skip this parameter, the latest image from image family will be copy to destination project</i>''')
+    }
+
+    environment {
+        DEBUG = "${pipelineParams.debug ?: false}"
+        GOOGLE_APPLICATION_CREDENTIALS = "$WORKSPACE_TMP/.gcloud/application-credentials.json"
+        CLOUDSDK_CONFIG = "$WORKSPACE/.config"
+    }
+
+    stages {
+        stage ('Init') {
+            steps {
+                script {
+                    if (pipelineParams.configRepoUrl?.trim()) {
+                        def configRepoDir = pipelineParams.configRepoDir ?: 'infra-config'
+                        checkout(
+                            scm: [
+                                $class: 'GitSCM',
+                                userRemoteConfigs: [[
+                                    url: "${pipelineParams.configRepoUrl}",
+                                    credentialsId: "${pipelineParams.configRepoCredentialsId ?: 'GitHub_Cred_Token'}"
+                                ]],
+                                branches: [[name: "${pipelineParams.configRepoBranch ?: 'main'}"]],
+                                extensions: [[
+                                    $class: 'RelativeTargetDirectory',
+                                    relativeTargetDir: configRepoDir
+                                ]]
+                            ],
+                            poll: false
+                        )
+                        pipelineParams.configRepoDir = configRepoDir
+                    }
+
+                    pipelineParams.gcpProject = "${params.DESTINATION_IMAGE_PROJECT}"
+                    appConfig = prepInfraDeployConfig(pipelineParams)
+                    wrap([$class: 'BuildUser']) {
+                        def builder = "CICD Build"
+                        try {
+                            builder = "${BUILD_USER}"
+                        } catch (error) {
+                            println "BUILD_USER not supplied using default value"
+                        }
+                        addBadge(text: "Build by - ${builder}", cssClass: 'badge-text--background jenkins-!-color-purple')
+                        addBadge(text: "Image from - ${params.SOURCE_IMAGE_PROJECT}", cssClass: 'badge-text--background jenkins-!-color-yellow')
+                        addBadge(text: "Image to - ${params.DESTINATION_IMAGE_PROJECT}", cssClass: 'badge-text--background jenkins-!-color-teal')
+                        addBadge(text: "Family - ${params.IMAGE_FAMILY}", cssClass: 'badge-text--background jenkins-!-color-blue')
+                    }
+                    if (params.SOURCE_IMAGE_PROJECT == params.DESTINATION_IMAGE_PROJECT) {
+                        error("Source and destination projects has to be different.")
+                    }
+                    if (params.IMAGE_FAMILY.isEmpty()) {
+                        error("Image Family needs to be set.")
+                    }
+                    region = appConfig.region
+                    kms_key = "projects/hsbc-6320774-kms-dev/locations/${region}/keyRings/computeEngine/cryptoKeys/computeEngine"
+                }
+            }
+        }
+
+        stage ('GCP Login') {
+            steps {
+                script {
+                    def resolvedCredentialId = appConfig.gcpServiceAccountCredentialsId ?: "${appConfig.infrastructureDeployerCredentialsId}-sa-${params.DESTINATION_IMAGE_PROJECT}"
+                    gcpActivateServiceAccount(
+                        gcpServiceAccountCredentialsId: resolvedCredentialId,
+                        gcpProjectName: params.DESTINATION_IMAGE_PROJECT,
+                        gcpProxyEnv: appConfig.gcpProxyEnv
+                    )
+                }
+            }
+        }
+
+        stage('Promote image') {
+            steps {
+                script {
+                    if (!params.SOURCE_IMAGE_NAME.isEmpty()) {
+                        def sourceExistsStatus = sh(
+                            script: "gcloud compute images describe ${params.SOURCE_IMAGE_NAME} --project ${params.SOURCE_IMAGE_PROJECT} >/dev/null 2>&1",
+                            returnStatus: true
+                        )
+                        if (sourceExistsStatus != 0) {
+                            error("Source image '${params.SOURCE_IMAGE_NAME}' does not exist in project '${params.SOURCE_IMAGE_PROJECT}'.")
+                        }
+
+                        def destinationExistsStatus = sh(
+                            script: "gcloud compute images describe ${params.SOURCE_IMAGE_NAME} --project ${params.DESTINATION_IMAGE_PROJECT} >/dev/null 2>&1",
+                            returnStatus: true
+                        )
+                        if (destinationExistsStatus == 0) {
+                            error("Image '${params.SOURCE_IMAGE_NAME}' already exists in destination project '${params.DESTINATION_IMAGE_PROJECT}'.")
+                        }
+                    }
+
+                    if (params.SOURCE_IMAGE_NAME.isEmpty()) {
+                        echo "<<<< Calling shell script for latest image pull, because source Image name is not provided >>>>"
+                        writeFile(file: "tools/copy_latest_gce_image.sh", text: libraryResource('gce/scripts/copy_latest_image.sh'))
+                        sh """
+                            chmod +x tools/copy_latest_gce_image.sh
+                            ./tools/copy_latest_gce_image.sh \\
+                            -s ${params.SOURCE_IMAGE_PROJECT} \\
+                            -d ${params.DESTINATION_IMAGE_PROJECT} \\
+                            -i ${params.IMAGE_FAMILY} \\
+                            -k ${kms_key}
+                            """
+                    } else {
+                        sh """
+                            gcloud compute images create ${params.SOURCE_IMAGE_NAME} \\
+                            --project ${params.DESTINATION_IMAGE_PROJECT} \\
+                            --source-image-project ${params.SOURCE_IMAGE_PROJECT} \\
+                            --source-image ${params.SOURCE_IMAGE_NAME} \\
+                            --family ${params.IMAGE_FAMILY} \\
+                            --kms-key ${kms_key}
+                            """
+                    }
+                }
+            }
+        }
+    }
+}
+}

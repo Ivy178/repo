@@ -1,0 +1,14 @@
+{
+  "image": "asia-east2-docker.pkg.dev/hsbc-11505776-ddshk-dev/ar-repo/h2o-prediction-icsm-aibrs-dataflow",
+  "sdk_info": {
+    "language": "PYTHON"
+  },
+  "metadata": {
+    "name": "h2o prediction image",
+    "parameters": [
+      {
+        "name": "params_for_model"
+      }
+    ]
+  }
+}

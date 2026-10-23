@@ -1,0 +1,126 @@
+@Library('feedz_gcp_shared_libraries@main') _
+def GCP_TERRAFORM_SA_KEY
+def C_CONFIG_YML_FILE
+def C_MY_OBJECT
+def C_CONFIG_ID = "foss-deployment-hase-${env.BUILD_NUMBER}"
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '10')),
+    parameters ([
+        choice(name: "ENVIRONMENT_NAME", choices: ["qa","pre-prod","prod"], description: ""),
+        choice(name: "COMPONENT", choices: ["cassandra","zookeeper","zookeeper-ds","rabbitmqhase","rabbitmq-ds-hase","keycloak-hase","grafana-hase","prometheus-hase","telegraf-hase"], description: ""),
+        choice(name: "CHART_DIR", choices: ["cassandra","cassandra-bitnami","zookeeper","zookeeper-ds","rabbitmq","rabbitmq-ds","keycloak","grafana","prometheus","telegraf"], description: ""),
+        choice(name: "BUSINESS_REGION", choices: ["HASE"]), description: "Business region given configuration work for"),
+        choice(name: "NAMESPACE", choices: ["hase-qa","hase-monitoring","hase-preprod","cassandra-4","hase-prod"], description: 'Kubernetes deployment name'),
+        choice(name: "OPERATION", choices: ["install","uninstall","diff"], description: "Kubectl operation to perform")
+    ])
+])
+
+pipeline {
+    agent {
+        node { label 'cm-linux' }
+    }
+
+    environment {
+        GOOGLE_APPLICATION_CREDENTIALS = "${env.WORKSPACE}/target_key.json"
+        NO_PROXY                        = "127.0.0.1,localhost,.hsbc"
+        KUBECONFIG                      = "${env.WORKSPACE}/~/.kube/config"
+        CHART_DIR                       = "./helm-charts/${params.CHART_DIR}"
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps{
+                script {
+                    C_CONFIG_YML_FILE = "${params.ENVIRONMENT_NAME.toLowerCase()}.yml"
+                    def sourceContent = libraryResource "feedzai/${params.BUSINESS_REGION.toLowerCase()}/${C_CONFIG_YML_FILE}"
+                    C_MY_OBJECT = readYaml text: sourceContent
+                    GCP_TERRAFORM_SA_KEY = "terraform-deployer-${params.ENVIRONMENT_NAME.toLowerCase()}-${params.BUSINESS_REGION.toLowerCase()}"
+                }
+            }
+        }
+
+        stage('Prepare GCP Configs') {
+            steps {
+                withCredentials([file(credentialsId: GCP_TERRAFORM_SA_KEY, variable: 'GCP_KEY')]) {
+                    sh(script: 'cp $GCP_KEY ./target_key.json', returnStdout: false)
+                    connections(build_id: "${C_CONFIG_ID}", project_id: "${C_MY_OBJECT.global.project_id}", proxy: "${C_MY_OBJECT.global.gcp_proxy}")       //集群信息和认证信息写入 kubeconfig
+                    sh(returnStdout: true, script: 'gcloud container clusters get-credentials ${C_MY_OBJECT.gke.cluster_name} --region ${C_MY_OBJECT.global.region} --project ${C_MY_OBJECT.global.project_id}')
+                }
+            }
+        }
+
+        stage('Perform Action') {
+            environment {
+                HTTPS_PROXY="${C_MY_OBJECT.gke.kubectl_proxy}:3128"
+            }
+            steps {
+                script {
+                    if (params.OPERATION == 'install') {
+                        echo "Installing component: ${params.COMPONENT}"
+                        if (params.COMPONENT == 'cassandra') {
+                            def cassandraUser = sh(script: 'gcloud secrets versions access 1 --secret="CASSANDRA_ADMIN_USERNAME" | tr -d "\\n"', returnStdout: true).trim()
+                            def cassandraPass = sh(script: 'gcloud secrets versions access 1 --secret="CASSANDRA_ADMIN_PASSWORD" | tr -d "\\n"', returnStdout: true).trim()
+                            sh """
+                                helm upgrade --install ${params.COMPONENT} ${env.CHART_DIR} --namespace ${params.NAMESPACE} -f ${env.CHART_DIR}/values/override-${params.ENVIRONMENT_NAME.toLowerCase()}.yaml --set "dbUser.user=${cassandraUser}" --set "dbUser.password=${cassandraPass}" --timeout 30m
+                            """
+                        } else {
+                            sh """
+                                helm upgrade --install ${params.COMPONENT} ${env.CHART_DIR} --namespace ${params.NAMESPACE} -f ${env.CHART_DIR}/values/override-${params.ENVIRONMENT_NAME.toLowerCase()}.yaml
+                            """
+                        }
+                    } else if (params.OPERATION == 'uninstall') {
+                        echo "Uninstalling component: ${params.COMPONENT}"
+                        sh """
+                            helm uninstall ${params.COMPONENT} --namespace ${env.NAMESPACE}
+                        """
+                    } else if (params.OPERATION == 'diff') {
+                        echo "running diff: ${params.COMPONENT}"
+                        sh """
+                            gcloud storage cp gs://${C_MY_OBJECT.global.project_id}-pipeline-binaries-bucket/helm-diff-3.12.2-linux-amd64.tgz helm-diff-3.12.2-linux-amd64.tgz
+                            mkdir -p helm-plugins
+                            tar -zxvf helm-diff-3.12.2-linux-amd64.tgz -C helm-plugins
+                            export HELM_PLUGINS=./helm-plugins         // helm-plugins 提供 helm diff 命令
+                            helm plugin list
+                            helm diff version    //确认diff插件版本号,确认已经安装
+                            helm diff upgrade --install ${params.COMPONENT} ${env.CHART_DIR} --namespace ${params.NAMESPACE} -f ${env.CHART_DIR}/values/override-${params.ENVIRONMENT_NAME.toLowerCase()}.yaml
+                        """                    //模拟执行 Helm 升级，输出所有资源的差异对比，不实际修改集群
+                    } else {
+                        error "Invalid action: ${params.OPERATION}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                currentBuild.displayName = "${params.COMPONENT}-${params.OPERATION}"
+                currentBuild.description = "Component: ${params.COMPONENT} Operation: ${params.OPERATION}"
+
+                def cleanupWorkspace = {
+                    echo "Cleaning workspace artifacts..."
+                    try {
+                        sh '''
+                            set -e
+                            rm -f ./target_key.json || true
+                            find . -maxdepth 1 -name "*.tmp" -type f -exec rm -f {} +
+                        '''
+                        echo "Workspace cleanup complete."
+                    } catch (err) {
+                        echo "Workspace cleanup encoutered an error: ${err}"
+                    }
+                }
+                cleanupWorkspace()
+            }
+        }
+        success {
+            echo "Action ${params.OPERATION} for component ${params.COMPONENT} completed successfully."
+        }
+        failure {
+            echo "Action ${params.OPERATION} for component ${params.COMPONENT} failed."
+        }
+    }
+}
+//configuration names start with a lower case letter and contain only lower case letters a-z, digits 0-9, and hyphens '-'

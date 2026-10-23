@@ -1,0 +1,227 @@
+# 一、 背景与岗位匹配（3题）
+1. 请做个自我介绍，结合JD谈谈你的匹配度。
+I have five years of experience in DevOps and MLOps, with solid hands-on knowledge of Azure and Databricks. 
+I'm good at using Terraform for infrastructure as code and setting up monitoring with ELK and Grafana. I've also worked on CI/CD and L1 automation, 
+so I'm a strong match for what this role is looking for.
+
+我有5年DevOps/MLOps经验，熟悉Azure和Databricks平台。擅长用Terraform做IaC，用ELK/Grafana搭建监控。之前做过CI/CD和L1自动化，和咱们岗位要求很契合。
+
+
+
+# 二、 Databricks与平台运维（4题）
+2. 谈谈你对Databricks平台的理解，以及日常运维的重点。
+Databricks is a unified data analytics platform. From an ops perspective, the key areas are cluster resource management, 
+Unity Catalog permission and compliance, and monitoring Spark job performance and cost.
+
+Databricks是统一的数据分析平台，核心运维点在于集群资源管理、Unity Catalog的权限合规，以及Spark作业的性能和成本监控。
+
+3. Databricks的Unity Catalog是用来做什么的？运维中要注意什么？
+Unity Catalog is a unified data governance layer. It manages data permissions, lineage, and auditing. In operations, the focus is on 
+monitoring permission changes, ensuring compliance, and preventing unauthorized access.
+
+Unity Catalog是统一的数据治理层，用于管理数据权限、血缘和审计。运维重点是监控权限变更、确保合规性，并防止越权访问。
+
+4. 如何监控Databricks集群的资源消耗并优化成本？
+We collect metrics through Azure Monitor or APIs and visualize them in Grafana. We set resource threshold alerts, 
+automatically shut down idle clusters, identify waste, and recommend the right instance types.
+
+通过Azure Monitor或API采集指标，利用Grafana展示。设置资源阈值告警，自动关停闲置集群，识别浪费并推荐合适的实例类型。
+
+5. 如何评估Databricks集群的资源消耗？发现浪费时怎么处理？
+We analyze Databricks Ganglia metrics together with cloud provider bills. When we find waste, we push for autoscaling and auto-termination,
+and we reclaim idle All-Purpose clusters.
+
+通过Databricks的Ganglia指标和云厂商账单结合分析。发现浪费时，推动设置自动伸缩（Autoscaling）和自动终止（Auto-termination），并回收闲置的All-Purpose集群。
+
+6. Databricks作业运行慢，你会如何排查？
+First, I check Spark UI to look for data skew, excessive shuffle, or insufficient resources. Then I combine that with log analysis, 
+optimize the code or adjust cluster configuration, and loop in the dev team if needed.
+
+先看Spark UI，排查数据倾斜、shuffle过大或资源不足。结合日志分析，优化代码或调整集群配置，必要时和开发团队沟通。
+
+7. Databricks核心Job失败，你的处理流程是什么？
+First, I confirm the impact and sync the team in a group chat. Second, I check Spark UI and logs to find the root cause, such as OOM or data source issues. 
+Third, if it's a quick fix, I restart or rerun it; if not, I roll back to a previous version. Fourth, I write an RCA afterward.
+
+第一，确认影响面并拉群同步；第二，查Spark UI和日志定位失败原因（如OOM、数据源问题）；第三，能快速修复就重启或重跑，不能就回滚版本；第四，事后写RCA。
+
+8. 如何确保AI平台的合规性？
+I use Unity Catalog for data permission control and auditing. I also integrate compliance scanning into CI/CD and use IaC like Terraform to make sure the 
+infrastructure configuration meets security baselines and to proactively catch non-compliant resources.
+
+结合Unity Catalog做数据权限管控和审计。在CI/CD阶段集成合规扫描，并通过IaC（Terraform）确保基础架构配置符合安全基线，主动发现不合规资源。
+
+9. Databricks监控指标？
+Four areas: resource metrics like CPU, memory, and GPU; Spark metrics like task failures and data skew; cost metrics like DBU consumption; 
+and audit logs to see who created clusters or changed permissions.
+
+四看：一看资源（CPU/内存/GPU），二看Spark（Task失败/数据倾斜），三看成本（DBU消耗），四看审计（Audit Logs）,看谁建了集群，谁修改权限
+
+
+
+
+# 三、 监控与可观测性（4题）
+10. 如何基于ELK构建面向Databricks的监控与可观测性方案？
+We use Filebeat or Logstash to collect platform logs and send them to Elasticsearch. Then we build dashboards in Kibana to show 
+job status, error rates, and resource usage, and configure alerts for anomalies.
+
+使用Filebeat或Logstash采集平台日志，发送到Elasticsearch。在Kibana中创建仪表盘，展示作业状态、错误率和资源使用情况，并配置异常告警。
+
+11. 如何基于ELK和Grafana构建Databricks的监控体系？
+We feed Databricks driver/executor logs and audit logs into ELK, parse them, and display them in Grafana. At the same time, 
+we pull cloud-level metrics from Azure Monitor to have unified alerting for both logs and metrics.
+
+将Databricks的Driver/Executor日志、审计日志（Audit Logs）接入ELK，解析后用Grafana展示。同时结合Azure Monitor抓取云层面的指标，实现日志和指标的统一告警。
+
+12. 如何将Azure Monitor的数据导出到Grafana？
+The most direct way is to install the Azure Monitor plugin in Grafana and use a Service Principal to query KQL directly. 
+If you want an open-source route, you can use a Prometheus exporter.
+
+最直接是Grafana装Azure Monitor插件，配Service Principal直连查KQL。想开源就上Prometheus Exporter。
+
+13. 如何实现基础设施问题的主动发现和资源消耗可视化？
+We collect low-level metrics with Prometheus/Grafana and set baseline alerts. We also use cost management tools like Azure Cost Management to visualize resources 
+and regularly produce reports to identify waste.
+
+通过Prometheus/Grafana采集底层指标，设置基线告警。结合成本管理工具（如Azure Cost Management），做资源可视化，定期输出报告识别浪费。
+
+14. 对故障告警和运维手册（Runbook），你平时是怎么管理的？
+Alerts should be tiered to avoid storms. A runbook should document the symptoms, troubleshooting steps, and solutions in detail, 
+and it should be regularly rehearsed and updated so the team can respond quickly.
+
+告警要分级，避免风暴。Runbook要详细记录故障现象、排查步骤和解决方案，并定期演练更新，确保团队能快速响应。
+
+15. 监控系统经常出现误报或告警风暴，你怎么优化？
+First, I tier alerts from P0 to P3 and set reasonable thresholds and durations. Second, I aggregate alerts and merge ones with the same root cause. 
+Finally, I introduce alert silencing and dependency-based degradation.
+
+首先梳理告警分级（P0-P3），设置合理的阈值和持续时间；其次做告警聚合，将同根因的告警合并；最后引入告警静默和依赖降级机制。
+
+16. 发现基础设施问题如何做到主动发现？
+Set up predictive alerts based on metrics instead of waiting for user reports. Use Prometheus or Azure Monitor to establish resource utilization baselines,
+ combine that with anomaly detection, and trigger tickets through Alertmanager as soon as something deviates from the baseline.
+
+建立基于指标的预测性告警，而非等用户报障。通过Prometheus/Azure Monitor设置资源利用率基线，结合异常检测算法，一旦偏离基线立即通过Alertmanager触发工单。
+
+
+
+# 四、 CI/CD 与 基础设施即代码（3题）
+17. 如何设计并实现端到端CI/CD流水线（如Azure DevOps）？
+Code commit triggers the pipeline. After code scan and unit tests, Terraform deploys infra, then we release to Databricks and run automated smoke tests.
+
+代码提交触发Pipeline，经过代码扫描、单元测试后，利用Terraform部署基础设施，再发布应用到Databricks，最后做自动化冒烟测试。
+
+18. Azure DevOps代码扫描失败，怎么处理？
+Check logs to locate. Block and fix real vulns; whitelist false positives. For urgent release, bypass with approval and log tech debt.
+
+看日志定位。真漏洞阻断修复；误报加白名单放行。紧急上线走审批绕过，事后记技术债
+
+19. Terraform管理云资源时，如何保证状态一致性和安全性？
+Use remote backend (e.g., Azure Storage) for state with locking. Store secrets in Key Vault. Code review and plan stage keep changes controlled.
+
+使用远程后端（如Azure Storage）存state文件并加锁。敏感信息用Key Vault管理，代码审查和Plan阶段确保变更可控。
+
+20. 如何用Terraform管理Databricks的资源和云资源？
+Use Terraform Databricks Provider for workspace, cluster, job; AzureRM/AWS Provider for VNet, storage, permissions. Remote state enables team collaboration.
+
+回答：使用Terraform的Databricks Provider管理Workspace、Cluster、Job等；用AzureRM/AWS Provider管理底层VNet、存储和权限。通过Remote State实现团队协作。
+
+21. 如何实现基础设施的合规性检查？
+Add static scan tools like Checkov or tfsec in CI/CD to block non-compliant configs (open public ports, unencrypted storage) at Terraform plan stage.
+
+回答：在CI/CD流程中引入静态代码扫描工具（如Checkov或tfsec），在Terraform Plan阶段就拦截不合规的资源配置（如开放公网端口、未加密存储）。
+
+22. 我们的平台部署在Azure上，也涉及AWS，如何实现跨云的统一运维？
+Use Terraform for cross-cloud infra orchestration at network layer; unify monitoring with ELK for logs and Grafana for metrics.
+
+回答：网络层用Terraform做跨云基础资源编排；监控层统一用ELK收集日志，Grafana展示指标；
+
+23. Terraform如何做安全认证？
+Never hardcode keys. Use cloud IAM roles (Azure SP, AWS Role) or OIDC temporary tokens. Store secrets in Key Vault or Vault and read them dynamically at runtime.
+
+核心是不把密钥写死在代码里。用云平台IAM角色（如Azure SP、AWS Role）或OIDC临时令牌，敏感数据统一存Key Vault或Vault，Terraform运行时动态读取。
+
+24. Terraform如何做环境隔离？
+State isolation is key. Common ways: directory isolation (separate dev/prod dirs) or workspaces. With modules and variable files, 
+one codebase takes different params and environments stay isolated.
+
+核心是State隔离。常用目录隔离（dev/prod各一套目录），或Workspace隔离。配合模块化和变量文件，同一套代码传不同参数，环境间互不干扰。
+
+
+
+# 五、 AI Ops 与 LLM 智能体（4题）
+25. 你了解哪些AI智能体开发框架或LLM工具链？
+Familiar with LangChain and AutoGen. Can call OpenAI or open-source model APIs and use RAG for knowledge retrieval to assist ops.
+
+了解LangChain、AutoGen等框架。能调用OpenAI或开源模型API，结合RAG做知识检索，用于辅助运维。
+
+26. 如何设计并维护AI智能体来处理L1级任务和常见问题？
+Build an LLM-based agent connected to internal knowledge base (RAG). On alert, it queries logs, searches runbooks, 
+runs preset scripts (e.g., restart service) for L1 issues, and escalates to humans on failure.
+
+基于LLM构建Agent，接入内部知识库（RAG）。当收到告警时，Agent自动查询日志、检索Runbook，尝试执行预设脚本（如重启服务）处理L1常见问题，失败则升级人工。
+
+27. 大模型在运维场景落地，最大的挑战是什么？怎么解决？
+Accuracy and hallucination. Solution: use RAG with enterprise knowledge base, limit agent permissions, 
+require human confirmation for critical actions, and keep tuning with feedback.
+
+准确性和幻觉。解决方案是结合RAG引入企业知识库，限制智能体权限，关键操作必须人工二次确认，并持续做反馈调优。
+
+28. MLOps工具（如MLflow）在平台运维中起什么作用？
+MLflow manages model lifecycle. Ops ensures MLflow HA, monitors deployment status, and works with CI/CD for automated model release.
+
+MLflow主要管理模型生命周期。运维需要确保MLflow服务高可用，监控模型部署状态，配合CI/CD实现模型的自动化发布。
+
+29. 在运维场景下引入LLM，如何保证准确性和避免幻觉？
+Strictly limit agent tool permissions to predefined APIs only. Use RAG so the model answers based on runbooks. 
+For high-risk actions like dropping a database, require human confirmation.
+
+回答：严格控制Agent的工具权限，只能执行预定义的API；引入RAG，让模型基于运维手册回答；对于高风险操作（如删库），必须设置人工二次确认。
+
+30. LLM跟RAG区别？
+LLM is the brain and tends to hallucinate; RAG is an external knowledge base. It retrieves internal docs first, then feeds them to the LLM for accurate answers.
+
+LLM是大脑，容易瞎编（幻觉）；RAG是外挂资料库。先查内部文档，再喂给LLM生成答案，保证准确不胡说。
+
+
+
+# 六、 故障排查与应急响应（5题）
+31. 生产环境突发故障（如平台不可用），你的响应流程是什么？
+Stop the bleeding first (e.g., failover, restart), then find root cause. Sync in a group chat, coordinate resources, and write an RCA to drive permanent fixes.
+
+先止损恢复（如切流、重启），再定位根因。拉群同步信息，协调资源，事后写RCA报告并推动永久性修复。
+
+32. 如何做根本原因分析（RCA）？
+Use 5 Whys or timeline analysis. Collect logs, metrics, and change records, find the trigger and root cause, define fixes, and track to closure.
+
+用5 Whys或时间线分析法。收集日志、指标和变更记录，找到触发点和根本原因，制定改进措施并跟踪闭环。
+
+33. 如何利用LLM工具链提升运维效率？
+Use LLM for log summarization and RCA assistance. Vectorize historical tickets and solutions, build an internal ops Q&A bot, and shorten MTTR.
+
+利用LLM做日志摘要、根因分析辅助（RCA）。将历史故障单和解决方案向量化，构建内部运维问答机器人，缩短故障排查时间（MTTR）。
+
+
+
+# 七、成本优化
+34. 如何识别并控制云资源浪费？
+Set up scheduled start/stop policies, like shutting down Dev clusters outside working hours. Monitor idle VMs and storage volumes,
+ and either auto-notify the owner or reclaim them. Use Spot instances for fault-tolerant workloads and keep optimizing DBU consumption.
+
+设置定时开关机策略（如非工作时间关闭Dev集群）。监控闲置的VM和存储卷，自动通知负责人或回收。使用Spot实例运行容错任务，持续优化DBU消耗。
+
+
+
+# 八、编程与软技能（2题）
+35. 你平时用Python或Bash做哪些运维自动化？
+I use Python to call cloud APIs for resource checks and data backups. I use Bash for deployment scripts and log cleanup. 
+I've also written scripts for monitoring data collection and alert notifications.
+
+用Python调用云API做资源巡检、数据备份。用Bash写部署脚本和日志清理。也写过监控数据抓取和告警推送的脚本。
+
+36、python try-except 是怎么处理？
+try wraps the code that might throw an error; except catches a specific exception and handles it (avoid bare except, since it can swallow errors); 
+else runs when no exception occurs; finally runs no matter what, usually to release resources or close connections.
+
+try包住可能出错的代码；except捕获指定异常并处理（别裸用except，容易吞报错）；else没报错时执行；finally无论成败都执行，通常用来释放资源或关连接。
+

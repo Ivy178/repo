@@ -1,0 +1,53 @@
+{
+    "fields": [
+        {
+            "name": "p1",
+            "mode": "NULLABLE",
+            "type": "FLOAT",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "p0",
+            "mode": "NULLABLE",
+            "type": "FLOAT",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "label",
+            "mode": "NULLABLE",
+            "type": "STRING",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "IVL_PTY_ID",
+            "mode": "NULLABLE",
+            "type": "INTEGER",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "last_prediction_ts",
+            "mode": "NULLABLE",
+            "type": "TIMESTAMP",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "calc_v3_score",
+            "mode": "NULLABLE",
+            "type": "FLOAT",
+            "description": "",
+            "fields": []
+        },
+        {
+            "name": "calc_score_unscaled",
+            "mode": "NULLABLE",
+            "type": "FLOAT",
+            "description": "",
+            "fields": []
+        }
+    ]
+}

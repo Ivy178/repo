@@ -1,0 +1,218 @@
+groovy
+  
+@Library('feedz_gcp_shared_libraries@main')_
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"100")),
+    parameters([
+        choice(name: 'ENVIRONMENT_NAME', choices: ['DEV', 'QA', 'PRE-PROD', 'PROD'], description: ''),
+        choice(name: 'BUSINESS_REGION', choices: ['AP', 'UK', 'HASE', 'APST', 'INDIA', 'EMEA', 'HSBCHET', 'APNM', 'MX', 'US'], description: 'Business region given configuration work for'),
+        // choice(name: 'APP_TYPE', choices: ['infra', 'helm', 'GMRU'], description: 'Select the G3 application type you want to rotate, app id will be retrieved from config file'),
+        booleanParam(name: 'firstCred', defaultValue: false, description: 'Check if first time to upload G3 credential for given account')
+    ])
+])
+
+def C_MY_OBJECT
+
+static final String C_CONFIG_ID = "${env.BUILD_TAG}".toLowerCase().replace('jenkins-', '').replace('_', '-').replace(' ', '-')
+
+//GCP Service Account
+def accountName = ''
+def g3AppId = ''
+def g3AppIds = []
+def g3AppTypes = ['infra', 'helm', 'GMRU']
+def g3ProjectId = ''
+
+def fileContent = ''
+def g3Cookie = ''
+
+// -------- USAGE --------
+//
+// WARNING - ONLY SCHEDULE KEY ROTATION WHEN NO OTHER JENKINS JOBS ARE RUNNING THAT ARE RELYING ON THE STORED GCP SERVICE ACCOUNT KEY TO OBTAIN AUTHORISATION INTO GCP
+// THAT'S WHY THIS JOB CONTENTS MUST NOT BE EMBEDDED INTO NORMAL PIPELINE RUNS. IF PIPELINES RUN IN PARALLEL, AND THEY SHOULD, THEN THERE IS A SIGNIFICANT RISK OF SA KEY BEING DELETED ON GCP WHILST
+// A PARALLEL PIPELINE IS RUNNING
+//
+
+pipeline {
+    agent {
+        label 'cm-linux'
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps {
+                script {
+                    // run /vars/loadConfigFile.groovy script to download configuration file from shared libraries
+                    def scriptContent = libraryResource 'common/g3_config.yaml'
+
+                    // load config.json into myObject parameter
+                    // readYaml > name of the method, createFileJSONObject -> name of function to run from that method
+                    // If we provide only call inside readYamlFile -> name of the method, we dont need to use function name jenkins will assume you want to call def call.
+                    C_MY_OBJECT = readYaml text: "${scriptContent}"
+
+                    def projectContent = libraryResource "feedzui/${params.BUSINESS_REGION.toLowerCase()}/${params.ENVIRONMENT_NAME.toLowerCase()}.yml"
+                    PROJECT_OBJECT = readYaml text: "${projectContent}"
+                }
+            }
+        }
+
+        stage('Prepare Credential File') {
+            steps {
+                script {
+                    withCredentials([file(credentialsId: "terraform-deployer-${params.ENVIRONMENT_NAME.toLowerCase()}-${params.BUSINESS_REGION.toLowerCase()}", variable: 'GCP_KEY')]) {
+                        fileContent = readFile("${GCP_KEY}".trim())
+                        echo "Use content of credential terraform-deployer-${params.ENVIRONMENT_NAME.toLowerCase()}-${params.BUSINESS_REGION.toLowerCase()} to validate"
+
+                        try {
+                            sh(script: 'cat $GCP_KEY > /target_key.json', returnStdout: false)
+                            connections(build_id: "${C_CONFIG_ID}", project_id: "${PROJECT_OBJECT.global.project_id}", proxy: "${PROJECT_OBJECT.global.gcp_proxy}")
+                        } catch (e) {
+                            echo "Error: ${e.toString()}"
+                            addBadge(text: "Invalid JWT Signature", cssClass: 'badge-text--background jenkins-!-color-red')
+                            error('SA key is not valid. Please make sure your Jenkins credential is updated with valid SA key')
+                        }
+                    }
+
+                    accountName = readJSON(text: fileContent).client_email
+                    if (params != null && params.BUSINESS_REGION) {
+                        def regionKey = params.BUSINESS_REGION.toLowerCase()
+                        g3AppIds = appTypes.collect { appType -> C_MY_OBJECT[regionKey][appType] }
+                        echo "Found App IDs: ${g3AppIds}"
+                        g3ProjectId = C_MY_OBJECT[regionKey].g3_project_id
+                    } else {
+                        error('params or its properties are null. Please check input parameters.')
+                    }
+
+                    addBadge(text: "Account - ${accountName}", cssClass: 'jenkins-!-color-purple')
+                    addBadge(text: "Region - ${params.BUSINESS_REGION}", cssClass: 'badge-text--background jenkins-!-color-teal')
+                    addBadge(text: "Type - ${appTypes}", cssClass: 'badge-text--background jenkins-!-color-indigo')
+                    addBadge(text: "G3 Project - ${g3ProjectId}", cssClass: 'badge-text--background jenkins-!-color-light-green')
+                    addBadge(text: "G3 Application - ${g3AppIds}", cssClass: 'badge-text--background jenkins-!-color-light-pink')
+                }
+            }
+        }
+
+        // generate G3 cookie https://alm-confluence.systems.uk.hsbc/confluence/spaces/G3/pages/188696855/How+to+use+G3+RESTful+API
+        stage('Generate and Use Cookie') {                    // 这里的 g3Cookie 用来让 Jenkins 后续调用 G3 API 时证明请求属于已登录的会话。
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'GB-TrnFrd-G-Dops', usernameVariable: 'G3_USERNAME', passwordVariable: 'G3_PASSWORD')]) {
+                    script {
+                        def curlCmd = """
+                        curl -i -H "Content-type: application/x-www-form-urlencoded" -c cookies.txt -X POST https://g3softwaredeploy.it.global.hsbc/j_spring_security_check -d "j_username=\$G3_USERNAME&j_password=\$G3_PASSWORD"
+                        """
+                        sh(script: curlCmd, returnStdout: true)
+                        def cookieContent = readFile('cookies.txt')
+                        def jSessionIdMatch = cookieContent =~ /JSESSIONID\s+([^\s;]+)/          // 例如JSESSIONID abc123      
+                        if (jSessionIdMatch) {
+                            g3Cookie = "JSESSIONID=${jSessionIdMatch[0][1]}"
+                            echo "successfully get JSESSIONID"
+                        } else {
+                            error('Failed to get JSESSIONID from curl cookies.txt')
+                        }
+                    }
+                }
+            }
+        }
+
+        //get existing secret and delete it on G3
+        stage('Get Existing Secret from G3') {
+            when {
+                expression { ! params.firstCred }
+            }
+            steps {
+                script {
+                    g3AppIds.each { currentG3AppId ->
+                        def g3AppId = currentG3AppId
+                        echo "Processing App ID: ${g3AppId}"
+                        def getSecretUrl = "https://g3softwaredeploy.it.global.hsbc/api/v2/projects/${g3ProjectId}/applications/${g3AppId}/secrets/${accountName}"
+                        def secretResponse = httpRequest(
+                            httpMode: 'GET',
+                            url: getSecretUrl,
+                            customHeaders: [[name: 'Cookie', value: g3Cookie]],
+                            contentType: 'APPLICATION_JSON',
+                            validResponseCodes: '200:404',
+                            consoleLogResponseBody: true
+                        ).content
+                        echo "Successfully get existing secret response"
+
+                        def existingSecretExpiryDateAndTime = readJSON(text: secretResponse).credentialExpiryDateAndTime     //获得凭证过期时间
+
+                        def deleteRequestBody = [
+                            g3Application: [id: "${g3AppId}"],
+                            account: "${accountName}",
+                            credentialExpiryDateAndTime: "${existingSecretExpiryDateAndTime}"
+                        ]
+
+                        def deleteApiUrl = 'https://g3softwaredeploy.it.global.hsbc/api/v1/secrets'
+                        def deleteResponse = httpRequest(
+                            httpMode: 'DELETE',
+                            url: deleteApiUrl,
+                            contentType: 'APPLICATION_JSON',
+                            acceptType: 'APPLICATION_JSON',
+                            customHeaders: [[name: 'Cookie', value: g3Cookie]],
+                            requestBody: groovy.json.JsonOutput.toJson(deleteRequestBody),
+                            validResponseCodes: '200:404',
+                            consoleLogResponseBody: true                //查询并提取旧 secret 的过期时间，然后构造删除请求，把旧 G3 secret 从对应应用和账号中移除。
+                        )
+
+                        echo "Successfully delete existing secret, status: ${deleteResponse.status}"
+                    }
+                }
+            }
+        }
+
+        stage('Rotate G3 Credential with SA Key') {
+            steps {
+                script {
+                    g3AppIds.each { currentG3AppId ->
+                        g3AppId = currentG3AppId
+                        echo "Processing App ID: ${g3AppId}"
+                        // prepare request body with given param and $fileContent
+                        def requestBody = [
+                            g3Application: [id: "${g3AppId}"],
+                            account: "${accountName}",
+                            credential: fileContent.bytes.encodeBase64().toString(),
+                            credentialExpiryDateAndTime: new Date().plus(90).format('yyyy-MM-dd HH:mm:ss')
+                        ]
+
+                        // echo "${requestBody}"
+                        // print(groovy.json.JsonOutput.toJson(requestBody))
+
+                        def apiUrl = 'https://g3softwaredeploy.it.global.hsbc/api/v2/secrets'
+                        def response = httpRequest(
+                            httpMode: 'POST',
+                            url: apiUrl,
+                            contentType: 'APPLICATION_JSON',
+                            customHeaders: [[name: 'Cookie', value: g3Cookie]],
+                            requestBody: groovy.json.JsonOutput.toJson(requestBody),
+                            validResponseCodes: '200:404',
+                            consoleLogResponseBody: true
+                        )
+
+                        if (response.status != 200) {
+                            echo "Failed to update credential with : ${response.status} - ${response}"
+                        } else {
+                            echo "Credential updated successfully: ${response.content}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            mail to: 'fdzdevopsteam@noexternalmail.hsbc.com',
+            body: "G3 Credential rotation job: ${env.BUILD_URL} for ${params.BUSINESS_REGION} Failed.\nError log:\n${currentBuild.rawBuild.getLog(100).join('\n')}",
+            subject: "G3 Credential Rotation Failed for ${params.BUSINESS_REGION}"
+        }
+        success {
+            mail to: 'fdzdevopsteam@noexternalmail.hsbc.com,fraudaps@hsbc.co.in',
+            body: "G3 Credential rotation job: ${env.BUILD_URL} for ${params.BUSINESS_REGION} Succeeded.",
+            subject: "G3 Credential Rotation Succeeded for ${params.BUSINESS_REGION}"
+        }
+        cleanup {
+            cleanWs()
+        }
+    }
+}

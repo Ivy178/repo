@@ -1,0 +1,17 @@
+[Unit]
+Description=Airflow configure Environment
+After=network-online.target NetworkManager.service
+
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStartPre=chmod +x /usr/local/sbin/configure.sh
+ExecStart=/bin/bash /usr/local/sbin/configure.sh
+RemainAfterExit=true
+Restart=on-failure
+RestartSec=5s
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,124 @@
+# clusters
+// 1个project 1个cluster
+
+# workloads
+// 50个workload，88多个pod，每个pod 1-3个副本，statefulset/deployment/job
+
+# secret & Config Map
+//
+ConfigMap 的核心作用：把“配置”从镜像里解耦出来，让应用不用重打镜像就能改配置。
+
+它解决什么问题
+不把配置写死在代码/镜像里
+不同环境(dev/uat/prod)用不同配置
+一句话：镜像管程序，ConfigMap 管配置
+
+# storage
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    pv.kubernetes.io/bind-completed: 'yes'
+    pv.kubernetes.io/bound-by-controller: 'yes'
+    resize.topolvm.io/increase: 4Gi
+    resize.topolvm.io/inodes-threshold: 20%
+    resize.topolvm.io/pre_capacity_bytes: '20957446144'
+    resize.topolvm.io/storage_limit: 160Gi
+    resize.topolvm.io/threshold: 20%
+    volume.beta.kubernetes.io/storage-provisioner: pd.csi.storage.gke.io
+    volume.kubernetes.io/selected-node: gke-gke-blue-3fe01653-n82m
+    volume.kubernetes.io/storage-provisioner: pd.csi.storage.gke.io
+  creationTimestamp: '2024-09-27T12:47:36Z'
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/instance: prometheus-prometheus
+    app.kubernetes.io/managed-by: prometheus-operator
+    app.kubernetes.io/name: prometheus
+    operator.prometheus.io/name: prometheus-prometheus
+    operator.prometheus.io/shard: '0'
+    prometheus: prometheus-prometheus
+  name: prometheus-prometheus-prometheus-db-prometheus-prometheus-prometheus-0
+  namespace: monitoring-system
+  resourceVersion: '3181910889'
+  uid: dc2ab8ef-611c-452d-a511-56dff96d2ca5
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 24Gi
+  storageClassName: hsbc-premium-rwo
+  volumeMode: Filesystem
+  volumeName: pvc-dc2ab8ef-611c-452d-a511-56dff96d2ca5
+status:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 24Gi
+  phase: Bound
+
+# Object Browser
+
+# Upgrades
+1) 查可升级版本
+gcloud container get-server-config --region <REGION> --project <PROJECT_ID>
+2) 升 control plane
+gcloud container clusters upgrade <CLUSTER_NAME> --region <REGION> --master --cluster-version <VERSION> --project <PROJECT_ID>
+3) 升 node pool
+gcloud container node-pools upgrade <POOL_NAME> --cluster <CLUSTER_NAME> --region <REGION> --cluster-version <VERSION> --project <PROJECT_ID>
+
+# Backup for GKE
+GKE 集群做“可恢复快照”
+Kubernetes 资源对象
+比如 Namespace、Deployment、StatefulSet、Service、ConfigMap、Secret(按策略)、CRD/CR 等。
+持久化数据(PV/PVC)
+对应磁盘快照，适合数据库、监控数据(例如 Prometheus/Alertmanager)等有状态应用。
+
+2) 创建 Backup Plan(备份计划)
+在 GCP 控制台进入 Backup for GKE:
+选择区域(region)
+选择目标集群 (你要备份哪个 GKE)
+选择备份范围:
+全集群，或
+指定 namespace(生产通常按 namespace 分)
+设置是否包含:
+Secret
+卷数据(PV/PVC 快照)
+设定调度(例如每天 02:00)
+设定保留期(例如 30 天)
+
+# Gateways, Services & Ingress
+NodePort/LoadBalancer  service
+1) 只集群内访问(默认)
+type: ClusterIP
+适合微服务内部互调。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: my-app
+  ports:
+    - port: 80
+      targetPort: 8080
+
+3) 公网暴露(GKE 常用)
+type: LoadBalancer
+GKE 会自动创建云负载均衡器并分配外网 IP。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: my-app
+  ports:
+    - port: 80
+      targetPort: 8080

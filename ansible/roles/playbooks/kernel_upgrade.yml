@@ -1,0 +1,45 @@
+# playbooks/kernel_upgrade.yml
+---
+-name:内核升级-滚动更新
+hosts:"{{ target_hosts }}"
+gather_facts:yes
+serial:1# 逐台执行
+
+tasks:
+-name:从负载均衡摘除
+uri:
+url:"http://{{ lb_api }}/api/v1/upstream/{{ inventory_hostname }}/down"
+method:POST
+delegate_to:localhost
+when:lb_apiisdefined
+
+-name:等待连接排空
+wait_for:
+timeout:60
+
+-name:升级内核
+yum:
+name:kernel
+state:latest
+register:kernel_update
+
+-name:重启服务器
+reboot:
+reboot_timeout:900
+msg:"Ansible 内核升级重启"
+when:kernel_update.changed
+
+-name:验证内核版本
+shell:uname-r
+register:kernel_version
+
+-name:重新加入负载均衡
+uri:
+url:"http://{{ lb_api }}/api/v1/upstream/{{ inventory_hostname }}/up"
+method:POST
+delegate_to:localhost
+when:lb_apiisdefined
+
+-name:等待流量恢复
+wait_for:
+timeout:30

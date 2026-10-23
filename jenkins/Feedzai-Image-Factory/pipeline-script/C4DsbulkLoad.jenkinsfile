@@ -1,0 +1,25 @@
+
+@Library('feedz_gcp_shared_libraries@main') _
+
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"15")),
+    parameters([
+        choice(name: "BUSINESS_REGION", choices: ["AP", "UK", "HASE", "APST", "INDIA", "EMEA", "HSBCNET"], description: "Business region given configuration work for"),
+        string(name: "ENV", defaultValue: "qa", description: "env you want to do backup, prepod/qa", trim: true),
+        choice(name: "CONTAINER_PREFIX", choices: ["ar-container-repo", "container-repo"], description: "artifactory registry prefix"),
+        string(name: "NAMESPACE", defaultValue: "cassandra", description: "namespace which you created for cassandra ver4", trim: true),
+        string(name: "SOURCE_BUCKET", defaultValue: "", description: "prod bucket to get the backup", trim: true),
+        string(name: "POD_IP", defaultValue: "", description: "any healthy cassandra pod ip", trim: true)
+    ])
+])
+
+cassandra4Restore{
+    ENVIRONMENT_NAME: "${ENV}",
+    BUSINESS_REGION: "${BUSINESS_REGION}",
+    GCP_TERRAFORM_SA_KEY: "terraform-deployer-${ENV}-${BUSINESS_REGION.toLowerCase()}",
+    GIT_CREDENTIALS: "GitHub_App_Integration",
+    NAMESPACE: "${NAMESPACE}",
+    SOURCE_BUCKET: "${SOURCE_BUCKET}",
+    CONTAINER_PREFIX: "${CONTAINER_PREFIX}",
+    POD_IP: "${POD_IP}"
+}

@@ -1,0 +1,194 @@
+eim: "${params.eim}"
+appname: "docker-hdpv2-g3"
+application_version: "${params.application_version}"
+
+log_trace:
+  enabled: true
+
+parameters:
+  - name: eim
+    type: choice
+    choices:
+      - 11505776
+    description: "select correct EIM ID"
+
+  # - name: project_region
+  #   type: choice
+  #   description: Format should be --region=europe-west2 OR asia-east2
+  #   choices:
+  #     - "asia-east2"
+
+  - name: pwi_artefact_version
+    type: string
+    default: ""
+
+  - name: ImageTag
+    type: string
+    default: ""
+    description: "Source image version.
+      e.g. 1.0.0"
+
+  - name: non_prod_target_env
+    type: choice
+    choices:
+      - UAT
+    description: "Select the GCP environment"
+  - name: prod_target_env
+    type: choice
+    choices:
+      - PREPROD
+      - PROD
+    description: "Select the GCP environment."
+
+  # - name: non_prod_project_id
+  #   type: choice
+  #   choices:
+  #     - hsbc-11505776-ddshh-dev
+    description: "project name"
+  # - name: prod_project_id
+  #   type: choice
+  #   choices:
+  #     - hsbc-11505776-ddshh-dev
+  #   description: "project name"
+
+# tools for user
+# tools: https://alm-confluence.systems.uk.hsbc/confluence/display/DSALM/GCP+Jenkins+PROD+installed+tools+of+Linux+agent
+jdk: "/usr/lib/openjdk/17.0.11+9"
+maven: "/usr/lib/maven/3.9.6"
+gradle: "/ds_build_new/build_tools/gradle/6.2.2"
+nodejs: "/usr/lib/nodejs/20.9.0"
+python: "/usr/lib/python/3.11.6"
+terraform: "/usr/lib/terraform/1.9.2"
+helm: "/usr/lib/helm/3.16.1"
+
+build:
+  zip:
+    nexus:
+      id: nexus302 # optional: Nexus repository ID to upload the zip artifact. Default value is nexus302
+      jenkins_credential_id: JENEXUS # required: Jenkins credentials ID for authenticating to Nexus.
+      repository: raw-alm-dev-n3p # optional: Nexus repository name. Default is raw-alm-dev-n3p.
+      artifacts: # list of artifacts to be built and deployed
+        - artifact_path: "com/hsb/wdb/dds/infr" # Path in the Nexus repository where the artifact will be stored
+          artifact_name: "k8s" # Name of the artifact (application or service)
+          artifact_version: "${params.pwi_artefact_version}" # Version of the artifact to be built
+          source_path: "./" # Local source directory containing the artifact files
+      credential_bindings:
+        #google_jenkins_credentials_file_id: "terraform-deployer-dev" # required for GCP, service account key file
+        nexus_jenkins_credentials_id: JENEXUS # required, use this token to upload artifact to nexus
+  container:
+    build_type: kaniko # required: docker build and push to registry
+    registry_name: nexus3.systems.uk.hsbc:18080/hsbc-11505776-ddswb-asp # nexus instance
+    registry_deployer: docker
+    gcr: asia-east2-docker.pkg.dev/hsbc-11505776-ddshk-dev/ar-repo
+    dockerfile_location: "hk/image" # optional: location of the Dockerfile,If this field is not provided, the default value is .)
+    docker_args: # optional: specify the docker build arguments
+      # type: "creds_secrettext" # secret text format. The credential value will be passed to variable NEXUS_TOKEN
+      # name: "NEXUS_TOKEN" # in dockerfile, use $(NEXUS_TOKEN) to get the value of the secret text credential
+      # type: "creds_usernamepassword" # jenkins credential format. the username will be passed to variable NEXUS_USER, The password will be by default passed to variable NEXUS_USER_PW (pipeline auto append '_PW' to the new vari
+      # referring the name)
+      name: "NEXUS_USER" # username variable, in docker file, use $(NEXUS_USER) to get the value of the username, use $(NEXUS_USER_PW) to get the value of the password
+      value: "nexus302-cred" # jenkins credential id
+    gcr:
+      application_image_name: "h2o-prediction-ics-alm-sdataflow" # required: image name
+      tag: "${params.ImageTag}" # optional: if provided, the image will be tagged with given value and pushed to each registry
+      http_proxy: "http://googledev-is-gcp.cloud.uk.hsbc:3128" # optional
+      no_proxy: "uk.hsbc"
+      jenkins_credential_id: DOCKER_CONFIG # optional: User must create a Secret file credential in jenkins and provide the id here. For more information on how to create the Secrete file, refer - https://alm-confluence.sys
+        hsbc/confluence/display/DSALM/Managed+Docker+images
+  controls:
+    aquascanners:
+      enabled: false
+    sonarqube:
+      enabled: false # Should always be enabled. (but not all language supported)
+      project_key: prg-alm-test-1 # required: sonar project key
+      jenkins_credential_id: SONARQUBE_CREDOS # required: Jenkins credentials ID for SonarQube (Secret text)
+      java_binaries: suddirectory/target/classes # optional: sometimes target/classes will not be created at the root of workspace. default is 'target/classes'
+      fileslimit: 500 # optional: set filesize limit for analysis
+      exclusions: "src/test/java/**" # optional: set the Path for test source files to be ignored by SonarQube. default is 500.
+      sources: "src/main/java" # optional: Sets the path for source directory.Default: . If not specified SonarQube does not treat any file as test file.
+      coverage_tool: jacoco # optional: If set the path the coverage report will be analysed. If not specified, all files in working directory and subdirectories will be scanned.
+      sonartype_iq: # optional: If step
+        enabled: true # Should always be enabled (but not all language supported)
+        jenkins_credential_id: sonatype-main-usr-pass # Jenkins credentials ID for Sonatype IQ (Username with password)
+        application_category: "WDB Media and Content" # required: organisation name
+        application_categories:
+          - "Used within Dev or Test on an HSBC server"
+        iq_application_name: "com.hsb.wdb.r48.infr" # optional: specify the application_name to override appname when creating sonatype_iq application. It will be composed by concatenating eim id and application_name with
+          underscore. If not specified, appname will be used
+        stage: "build" # optional: Can be build or release. default is 'build', build will report findings, but not break the pipeline. release will break if there are findings.
+        scan_target: "*" # optional: scan target default is 'target/'
+        force_scan: false # If true, scan is skipped if already performed within last 24 hours (smart scanning)
+
+cyberflows:
+  jenkins_credential_id: JENEXUS # required: Jenkins credentials ID for Cyberflows (Username with password)
+  timeout: 120 # timeout (int): The timeout value in seconds
+  sast:
+    enabled: true
+    configuration_id: mG9QnHekyZEgZ601SRdaCjr4 # optional: Configuration ID of the SAST scan created from cyberflows UI.
+    # if configuration_id is not set or cannot be found, app_type will be used when creating one.
+    application_type: Other # optional: Can be Other, Web, Mobile, Desktop, API, Cloud, Embedded, IoT, Network, SCADA, ICS, OT, IoT, Mobile, Web, Desktop, API, Cloud, Embedded, IoT, Network, SCADA, ICS, OT. Defaults to "Other".
+  dast:
+    enabled: false
+    configuration_id: AajY19EhnVOHyZH2Hf8GnzLWAM # required: Configuration ID of the DAST scan created from cyberflows UI.
+  cont:
+    enabled: false
+    configuration_id: AajY19EhnVOHyZH2Hf8GnzLWAM # optional: Configuration ID of the CONT scan created from cyberflows UI. If not specified, will trigger scan by EIM ID.
+
+deploy: # optional: overall control for deployment stage. default is false.
+  enabled: true # optional
+
+  g3: # optional: Include this config block if you perform deployments via g3
+    enabled: true # optional: enable / disable g3 deployment module. default is false.
+    project_area: "Decisioning_Data_Store_ASP" # required: provide your G3 project name
+    application_name: "DDS-AIRMS" # required: provide your G3 application name # optional: provide credentials to deploy automatically to non-prod environments. If not provided a prompt will request credentials.(Username with password)
+    # password: use this option, only if you required to deploy artifacts directly from maven pom or nexus or github to G3
+    package_from_maven: # use this option to deploy artifacts from maven builds
+      - pom_path: "directory/pom.xml" # required: this value should be matched with one of the component built using maven steps, if not match G3 package creation will not happen/fail.
+        package_artifact_name: "mdp2-test-v1" # optional: You can specify the artifact name of the target module to deploy when multiple modules are built through a single POM
+    package_from_nexus: # use this option to deploy artifacts from nexus
+      summary: "g3 package with standard pipeline" # optional: only required if you required to deploy artifacts from nexus, provide summary for your package work item
+      package_artifact_name: "docker-image-pipeline" # required: provide artifact name for your package work item
+      pwi_artefact_version: "${params.pwi_artefact_version}" # required: provide artifact version for your package work item
+      nexus_artifact_path: "https://nexus3.systems.uk.hsbc:8081/repository/raw-alm-dev-n3p/com/hsb/wdb/dds/infr/k8s/${params.pwi_artefact_version}/k8s-${params.pwi_artefact_version}.zip"
+    package_from_github: # use this option to deploy artifacts from github
+      summary: "g3 package with standard pipeline" # required: provide summary for your package work item. This example is showing creation of g3 PWI from github options.
+      package_artifact_name: "github-pwi-test-v1" # required: provide artifact work item
+      pwi_git_repo_url: "https://alm-github.uk.hsbc/HSB-APB-Tooling/ocg.git" # required: Github repository url where deployment manifests files exists (for IKP/GKE deployment)
+      pwi_git_branch_name: "main" # required: name of the branch of the above repository which will get referred by G3 while creating PWI.
+    package_from_modis:
+      - package_json: "package.json" # required: path to the package.json file.
+        artifact_name: "my-app1" # required: name of the first artifact to be deployed.
+        artifact_name: "my-app2" # required: name of the second artifact to be deployed.
+    rwl: # required: use this option to define your release work item item and deployments
+      release_summary: "g3 pwi with standard pipeline" # required: provide summary for your release work item
+      release_config_id: 8396752 # required: release configuration item already created with correct details
+      # For maven builds your RWL should contain artifact name from pom.xml, else it will fail at the time of RWL creation
+      allow_continuous_deployment: "yes" # required: enable / disable allowContinuousDeployment
+      deployments: # deploy release work item release to non-prod target environments
+        # deployment_target: target env name as per defined in config or follow
+        - deployment_target: "${params.non_prod_target_env}" # optional
+          summary: "g3 package with standard pipeline"
+          target_environment: "${params.non_prod_target_env}" # required: environment name, should match the environment name configured in G3
+          promoted_by: "45424892" #45386478 # required: this PSID is just for payload purpose, it doesn't need to be same as credId
+          release_now: "yes" #yes
+          release_args:
+            eim: "${params.eim}"
+            # project_id: "${params.non_prod_project_id}" # required: GCP project id to deploy to, this will be used by G3 to deploy the artifacts
+            # project_region: "${params.project_region}" # required: GCP project region to deploy to, this will be used by G3 to deploy the artifacts
+            ImageTag: "${params.ImageTag}"
+
+# # production:
+#   summary: "g3 poc with standard pipeline"
+#   target_environment: "${params.prod_target_env}"
+#   reference_cr: "CHG5612225"
+#   planned_start_date_time_utc: "2025-08-12 14:00:00"
+#   planned_end_date_time_utc: "2025-08-13 14:00:00"
+#   auto_release_time_utc: "2025-08-12 14:10:00"
+#   release_args:
+#     eim: "${params.eim}"
+#     project_id: "${params.prod_project_id}"
+#     project_region: "${params.project_region}"
+#     tg_action: "${params.tg_action}"
+#     sourceImageName: "${params.sourceImageName}"
+#     ImageTag: "${params.ImageTag}"
+#     appname: "${params.appname}"

@@ -1,0 +1,9 @@
+# group_vars/dbservers.yml
+---
+# 数据库服务器特殊配置
+patching:
+allow_reboot:false# 数据库服务器默认不自动重启
+exclude_packages:
+-kernel*
+-mysql*
+-mariadb*

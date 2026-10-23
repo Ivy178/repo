@@ -1,0 +1,385 @@
+pipeline {
+    agent any
+    parameters {
+        string(name: 'GCP_PROJECT', description: 'GCP Project Id')
+        booleanParam(name: 'DRY_RUN', defaultValue: true, description: 'Set to false to actually delete images')
+    }
+    stages {
+        stage('Cleanup Unused GCP Compute Images') {
+            steps {
+                script {
+                    def gcpProject = params.GCP_PROJECT
+                    def dryrun = params.DRY_RUN
+                    def minAgeDays = 7
+                    def todayDate = java.time.LocalDate.now()
+
+                    def imageNameTimestampPattern14 = ~/.*-(\d{14})$/
+                    def imageNameDatePattern8 = ~/.*-(\d{8})$/
+
+                    def directDeletePrefixes = [
+                        "gce-rhel8-ver2-stage2-gvnic"
+                    ]
+
+                    def helperTypeRules = [
+                        [
+                            key: "pipeline-runner",
+                            prefixes: [
+                                "pipeline-runner-"
+                            ]
+                        ],
+                        [
+                            key: "app-runner",
+                            prefixes: [
+                                "app-runner-"
+                            ]
+                        ], 
+                        [
+                            key: "service-runner",
+                            prefixes: [
+                                "service-runner-"
+                            ]
+                        ]
+                    ]
+
+                    def parseImageNameDateInfo = { imageName ->
+                        def normalizedImageName = imageName.endsWith('-immutable') ? imageName.substring(0, imageName.length() - '-immutable'.length()) : imageName    //imageName = "my-image-immutable"  结果       = "my-image"
+
+                        def matcher14 = (normalizedImageName =~ imageNameTimestampPattern14)
+                        if (matcher14.matches()) {
+                            def timestampText = matcher14[0][1]
+                            return [
+                                token: timestampText,
+                                date: java.time.LocalDate.parse(
+                                    timestampText.substring(0, 8),
+                                    java.time.format.DateTimeFormatter.ofPattern('yyyyMMdd')
+                                )
+                            ]
+                        }
+
+                        def matcher8 = (normalizedImageName =~ imageNameDatePattern8)
+                        if (matcher8.matches()) {
+                            def dateText = matcher8[0][1]
+                            return [
+                                token: dateText,
+                                date: java.time.LocalDate.parse(
+                                    dateText,
+                                    java.time.format.DateTimeFormatter.ofPattern('yyyyMMdd')
+                                )
+                            ]
+                        }
+
+                        return null
+                    }
+
+                    def normalizeImageName = { imageName ->
+                        imageName?.endsWith('-immutable') ? imageName.substring(0, imageName.length() - '-immutable'.length()) : imageName
+                    }
+
+                    def classifyHelperType = { imageName ->
+                        def normalized = normalizeImageName(imageName)?.toLowerCaseCase()
+                        if (!normalized) {
+                            return null
+                        }
+                        def matched = helperTypeRules.find { rule ->
+                            rule.prefixes.any { prefix -> normalized.startsWith(prefix) }
+                        }
+                        return matched?.key
+                    }
+
+                    def parseHelperSortInfo = { imageName, helperType ->
+                        def normalized = normalizeImageName(imageName)
+                        if (!normalized || !helperType) {
+                            return null
+                        }
+                        def helperRule = helperTypeRules.find { it.key == helperType }
+                        if (!helperRule) {
+                            return null
+                        }
+
+                        def lowerNormalized = normalized.toLowerCase()
+                        def matchedPrefix = helperRule.prefixes.find { prefix -> lowerNormalized.startsWith(prefix) }
+                        if (!matchedPrefix) {           //pipeline-runner-1-2-3-20240101010101
+                            return null
+                        }
+
+                        def tail = normalized.substring(matchedPrefix.length())     //截掉开头，剩下的部分是 1-2-3-20240101010101
+                        def m14 = (tail =~ /^(\d+)-(\d+)-(\d+)-(\d{14})$/)
+                        if (m14.matches()) {
+                            return [
+                                major: m14[0][1].toInteger(),
+                                minor: m14[0][2].toInteger(),
+                                patch: m14[0][3].toInteger(),
+                                sortableToken: m14[0][4]
+                            ]
+                        }
+
+                        def m8 = (tail =~ /^(\d+)-(\d+)-(\d+)-(\d{8})$/)
+                        if (m8.matches()) {
+                            return [
+                                major: m8[0][1].toInteger(),
+                                minor: m8[0][2].toInteger(),
+                                patch: m8[0][3].toInteger(),
+                                sortableToken: "${m8[0][4]}000000"
+                            ]
+                        }
+
+                        return null
+                    }
+
+                    def migListRaw = sh(
+                        script: "gcloud compute instance-groups managed list --project='${gcpProject}' --format=\"value(name)\" | awk 'tolower(\$0) !~ /fdr/'",
+                        returnStdout: true
+                    ).trim()
+
+                    def migs = []
+                    if (migListRaw) {
+                        migListRaw.split('\n').each { line ->
+                            line = line?.trim()
+                            if (line) {
+                                migs << line
+                            }
+                        }
+                    }
+
+                    echo "MIGs in project ${gcpProject}:"
+                    if (migs) {
+                        migs.each { echo "- ${it}" }
+                    } else {
+                        echo "No MIGs returned from gcloud"
+                    }
+
+                    def templateListRaw = sh(
+                        script: "gcloud compute instance-groups managed list --project='${gcpProject}' --format=\"value(instanceTemplate.basename())\" | awk 'NF' | awk 'tolower(\$0) !~ /fdr/' | sort -u",
+                        returnStdout: true
+                    ).trim()
+
+                    def templates = []
+                    if (templateListRaw) {
+                        templateListRaw.split('\n').each { line ->
+                            line = line?.trim()
+                            if (line) {
+                                templates << line
+                            }
+                        }
+                    }
+
+                    echo "Templates used by MIGs in project ${gcpProject}:"
+                    if (templates) {
+                        templates.each { echo "- ${it}" }
+                    } else {
+                        echo "No templates returned from MIGs"
+                    }
+
+                    def usedImages = [] as Set
+                    def usedImageMappings = []
+                    templates.each { template ->
+                        def templateLookup = sh(
+                            script: '''
+                                set -e
+                                set +x
+                                result=$(gcloud compute instance-templates describe '${template}' --project='${gcpProject}' --format="value(properties.disks[0].initializeParams.sourceImage.basename())" 2>&1)
+                                status=$?
+                                if [ ${status} -eq 0 ]; then
+                                    printf 'IMAGE:%s\\n' \"${result}\"
+                                else
+                                    printf 'ERROR:%s\\n' \"${result}\"
+                                fi
+                                '''.stripIndent(),
+                            returnStdout: true
+                        ).trim()
+
+                        if (templateLookup.startsWith('IMAGE:')) {
+                            def imageName = templateLookup.substring('IMAGE:'.length()).trim()
+                            if (imageName) {
+                                usedImages << imageName
+                                usedImageMappings << "- ${template} -> ${imageName}"
+                            } else {
+                                echo "Template ${template} returned no image name"
+                                usedImageMappings << "- ${template} -> <no image found>"
+                            }
+                        } else {
+                            def errorMessage = templateLookup.startsWith('ERROR:') ? templateLookup.substring('ERROR:'.length()).trim() : templateLookup
+                            echo "Skipping template ${template}: ${errorMessage ?: 'instance template not found'}"
+                            usedImageMappings << "- ${template} -> <lookup failed>"
+                        }
+                    }
+
+                    echo "Images currently referenced by MIG templates in project ${gcpProject}:"
+                    if (usedImageMappings) {
+                        usedImageMappings.each { echo it }
+                    } else {
+                        echo "No MIG template to image mappings returned from gcloud"
+                    }
+
+                    def allImagesRaw = sh(
+                        script: "gcloud compute images list --project='${gcpProject}' --no-standard-images --format=\"value(name,creationTimestamp)\" --sort-by=creationTimestamp",
+                        returnStdout: true
+                    ).trim()
+
+                    if (!allImagesRaw) {
+                        echo "No images returned from gcloud"
+                    } else {
+                        def deletedImages = []
+                        def keptImages = []
+                        def keptWithReasons = []
+                        def recentUnusedImages = []
+                        def helperLatestKeptImages = []
+                        def images = []
+
+                        allImagesRaw.split('\n').each { line ->
+                            line = line?.trim()
+                            if (!line) return
+                            def parts = line.split(/\s+/, 2)
+                            if (parts.length < 2) {
+                                echo "Skipping unparsable line: ${line}"
+                                return
+                            }
+                            images << [name: parts[0], creationTimestamp: parts[1]]
+                        }
+
+                        def latestHelperByType = [:]
+                        images.each { img ->
+                            def helperType = classifyHelperType(img.name)
+                            if (!helperType) {
+                                return
+                            }
+
+                            def sortInfo = parseHelperSortInfo(img.name, helperType)
+                            if (!sortInfo) {
+                                return
+                            }
+
+                            def current = latestHelperByType[helperType]
+                            def isNewer = !current ||
+                                sortInfo.major > current.major ||
+                                (sortInfo.major == current.major && sortInfo.minor > current.minor) ||
+                                (sortInfo.major == current.major && sortInfo.minor == current.minor && sortInfo.patch > current.patch) ||
+                                (sortInfo.major == current.major && sortInfo.minor == current.minor && sortInfo.patch == current.patch && sortInfo.sortableToken > current.sortableToken)
+
+                            if (isNewer) {
+                                latestHelperByType[helperType] = [
+                                    name: img.name,
+                                    major: sortInfo.major,
+                                    minor: sortInfo.minor,
+                                    patch: sortInfo.patch,
+                                    sortableToken: sortInfo.sortableToken
+                                ]
+                            }
+                        }
+
+                        def helperLatestNames = latestHelperByType.values().collect { it.name } as Set
+
+                        echo "Evaluating all images in project ${gcpProject} against MIG template usage"
+
+                        images.each { img ->
+                            def name = img.name
+                            def created = img.creationTimestamp
+                            if (!name || !created) {
+                                return
+                            }
+
+                            if (directDeletePrefixes.any { prefix -> name.startsWith(prefix) }) {
+                                if (dryrun) {
+                                    deletedImages << "- ${name} (created: ${created})"
+                                    echo "[DRYRUN] Would delete direct-delete image: ${name} (created: ${created})"
+                                } else {
+                                    echo "Deleting direct-delete image: ${name} (created: ${created})"
+                                    try {
+                                        sh "gcloud compute images delete '${name}' --project='${gcpProject}' --quiet"
+                                        deletedImages << "- ${name} (created: ${created})"
+                                        echo "[DELETED] ${name} | reason: direct-delete prefix match (gce-rhel8-ver2-stage2-gvnic)"
+                                    } catch (err) {
+                                        echo "Failed to delete ${name}: ${err}"
+                                    }
+                                    return
+                                }
+                            }
+
+                            def parsedInfo = parseImageNameDateInfo(name)
+
+                            if (usedImages.contains(name)) {
+                                keptImages << "- ${name} (created: ${created})"
+                                keptWithReasons << "- ${name} (created: ${created}) | reason: referenced by MIG template"
+                                return
+                            }
+
+                            if (helperLatestNames.contains(name)) {
+                                def helperType = classifyHelperType(name)
+                                helperLatestKeptImages << "- ${name} (created: ${created})"
+                                keptImages << "- ${name} (created: ${created}) [kept: latest helper image for ${helperType}]"
+                                keptWithReasons << "- ${name} (created: ${created}) | reason: latest helper image for ${helperType}"
+                                return
+                            }
+
+                            // Delete only when image-name date age (day-level) is greater than 7 days.
+                            def imageDate
+                            def imageNameTimestamp = null
+                            try {
+                                if (!parsedInfo) {
+                                    keptImages << "- ${name} (created: ${created}) [kept: no yyyyMMddHHmmss or yyyyMMdd suffix in image name]"
+                                    keptWithReasons << "- ${name} (created: ${created}) | reason: no yyyyMMddHHmmss or yyyyMMdd suffix in image name"
+                                    return
+                                }
+                                imageNameTimestamp = parsedInfo.token
+                                imageDate = parsedInfo.date
+                            } catch (err) {
+                                keptImages << "- ${name} (created: ${created}) [kept: cannot parse timestamp from image name]"
+                                keptWithReasons << "- ${name} (created: ${created}) | reason: cannot parse timestamp from image name"
+                                return
+                            }
+
+                            def ageDays = todayDate.toEpochDay() - imageDate.toEpochDay()
+                            if (ageDays <= minAgeDays) {
+                                recentUnusedImages << "- ${name} (created: ${created})"
+                                keptWithReasons << "- ${name} (created: ${created}) | reason: unused but ageDays (${ageDays}) <= ${minAgeDays}"
+                                return
+                            }
+
+                            if (dryrun) {
+                                deletedImages << "- ${name} (created: ${created})"
+                                echo "[DRYRUN] Would delete unused image older than ${minAgeDays} days based on image-name date: ${name} (name date: ${imageDate}, ageDays: ${ageDays})"
+                            } else {
+                                echo "Deleting unused image older than ${minAgeDays} days based on image-name date: ${name} (name date: ${imageDate}, ageDays: ${ageDays})"
+                                try {
+                                    sh "gcloud compute images delete '${name}' --project='${gcpProject}' --quiet"
+                                    deletedImages << "- ${name} (created: ${created})"
+                                    echo "[DELETED] ${name} | reason: unused and older than ${minAgeDays} days (name date: ${imageDate}), ageDays: ${ageDays}"
+                                } catch (err) {
+                                    echo "Failed to delete ${name}: ${err}"
+                                }
+                            }
+                        }
+
+                        // Always print a consolidated KEEP section so delete mode still shows KEEP logs.
+                        echo "KEEP summary for project ${gcpProject}:"
+                        if (keptWithReasons) {
+                            keptWithReasons.each { kept ->
+                                echo "[KEEP] ${kept}"
+                            }
+                        } else {
+                            echo "[KEEP] None"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            // mail to: 'fdzdevopsteam@noexternlmail.hsbc.com',
+            // body: "Images Auto Deletion: ${env.BUILD_URL} for ${params.GCP_PROJECT}. Failed.\nError log:\n${currentBuild.rawBuild.getLog(100).join('\n')}",
+            // subject: "Images Auto Deletion FAILED for ${params.GCP_PROJECT}"
+            echo "[POST][FAILURE] Images Auto Deletion failed for ${params.GCP_PROJECT}. Build: ${env.BUILD_URL}"
+        }
+        success {
+            // mail to: 'fdzdevopsteam@noexternlmail.hsbc.com',
+            // body: "Images Auto Deletion: ${env.BUILD_URL} for ${params.GCP_PROJECT} Succeeded.",
+            // subject: "Images Auto Deletion Succeeded for ${params.GCP_PROJECT}"
+            echo "[POST][SUCCESS] Images Auto Deletion succeeded for ${params.GCP_PROJECT}. Build: ${env.BUILD_URL}"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
+

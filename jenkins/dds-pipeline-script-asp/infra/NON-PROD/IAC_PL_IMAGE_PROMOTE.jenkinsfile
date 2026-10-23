@@ -1,0 +1,40 @@
+@Library('dsx_gcp_shared_libraries@infra-spec') _
+def params = [
+debug: true,
+gcpSourceImageProjects: [
+'hsbc-12721809-dsxgb-dev',
+'hsbc-12614250-dsxasp-dev',
+'hsbc-20016237-dsxeastp-dev',
+'hsbc-20016152-dsxwmena-dev',
+'hsbc-20016237-dsxeastpcore-dev'
+],
+gcpDestinationImageProjects: [
+'hsbc-12614250-dsxasp-dev',
+'hsbc-12614250-dsxaspsit-dev',
+'hsbc-12614250-dsxaspuat-dev',
+'hsbc-12614250-dsxhkpre-prod',
+'hsbc-12614250-dsxhk-prod',
+'hsbc-12721809-dsxgb-dev',
+'hsbc-12721809-dsxgbsit-dev',
+'hsbc-12721809-dsxgbuat-dev',
+'hsbc-12721809-dsxgbpre-prod',
+'hsbc-12721809-dsxgb-prod',
+'hsbc-20016237-dsxeastp-dev',
+'hsbc-20016237-dsxeastpcore-dev',
+'hsbc-20016237-dsxeastpsit-dev',
+'hsbc-20016237-dsxeastpuat-dev',
+'hsbc-20016237-dsxeastppre-prod',
+'hsbc-20016237-dsxeastp-prod',
+'hsbc-20016152-dsxwmena-dev',
+'hsbc-20016152-dsxwmenasit-dev',
+'hsbc-20016152-dsxwmenauat-dev',
+'hsbc-20016152-dsxwmenapre-prod',
+'hsbc-20016152-dsxwmena-prod'
+],
+configRepoUrl: 'https://alm-github.systems.uk.hsbc/DSX/dsx-infra-core.git',
+configRepoBranch: 'main',
+configRepoDir: 'infra-config',
+configRepoCredentialsId: 'GitHub_Cred_Token'
+]
+
+gceImagePromote(params)

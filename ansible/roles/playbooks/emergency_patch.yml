@@ -1,0 +1,40 @@
+# playbooks/emergency_patch.yml
+---
+-name:紧急补丁修复
+hosts:"{{ target_hosts | default('all') }}"
+gather_facts:yes
+serial:100# 紧急情况提高并发
+
+tasks:
+-name:仅更新指定包
+yum:
+name:"{{ emergency_packages }}"
+state:latest
+when:ansible_os_family=="RedHat"
+
+-name:验证补丁版本
+shell:"rpm -q {{ item }}"
+loop:"{{ emergency_packages }}"
+register:version_check
+when:ansible_os_family=="RedHat"
+
+-name:显示更新后版本
+debug:
+msg:"{{ version_check.results | map(attribute='stdout') | list }}"
+
+
+/*
+运行命令:ansible-playbook playbooks/emergency_patch.yml \
+  -e "target_hosts=all" \
+  -e '{"emergency_packages": ["glibc", "glibc-common"]}' \
+  --forks 100
+*/
+
+
+/*
+运行结果:PLAY RECAP *********************************************************************
+web-001.prod.internal      : ok=4    changed=1    unreachable=0    failed=0    skipped=0
+web-002.prod.internal      : ok=4    changed=1    unreachable=0    failed=0    skipped=0
+...
+500 台服务器全部更新完成，耗时 45 分钟
+*/

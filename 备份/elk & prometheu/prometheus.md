@@ -1,0 +1,114 @@
+
+# 项目介绍
+> 监控指标
+集群状态: Deployment 副本数、HPA、PVC容量、Pending Pod
+应用(业务)：QPS、P99延迟、错误率、自定义业务指标
+容器(Pod)：CPU/内存使用、OOMKilled、重启次数、容器状态
+基础设施(Node): CPU·内存·磁盘·网络IO·节点Ready
+
+> 监控来源
+Node - node-exporter
+Pod / Container - cAdvisor（kubelet 内置）
+业务服务 - 应用 /metrics 端点
+集群 - kube-state-metrics
+
+> 监控怎么配合
+Prometheus 负责“采集和存储”监控数据，Grafana 负责“可视化”这些数据。
+
+> 架构
+主动从targets 拉取指标，通过 PromQL查询，Grafana 可视化，Alertmanager 告警
+
+> Prometheus主要组件：
+Prometheus Server：负责数据抓取、存储和查询。
+Exporters：暴露指标，比如 MySQL、Redis、Nginx    --采集
+Alertmanager：处理告警，实现告警分组、去重、抑制、路由通知
+Grafana：告警可视化
+Pushgateway：推模式网关，补充支持短生命周期任务的指标推送
+
+
+> Grafana核心特点：
+统一数据源：不仅支持 Prometheus，还支持 Elasticsearch、MySQL、AWS CloudWatch、Loki（日志）等几十种数据源。这意味着可以在同一个界面查看监控指标、日志和链路追踪。
+丰富的图表：提供时间序列图、柱状图、热力图、状态面板、地理信息图等丰富的展示方式。
+动态仪表盘：支持通过变量定义（如选择不同的“服务器”或“命名空间”），实现仪表盘的动态交互，无需创建无数个重复的图表。告警与协作：
+Grafana 也具备较新的统一告警能力，可以在图表上直接配置告警规则并集成到企业通讯工具。
+
+# 怎么采集
+> exporter有什么用
+Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式的系统，采集并转成 metrics 指标，
+让 Prometheus 能统一监控。一句话：没有 Exporter，Prometheus 就监控不了这些系统。
+
+
+> 配置MySQL Exporter
+1. 建监控账号：在MySQL里创建一个专用账号，别用root。
+2. 配Exporter连接：在Exporter所在机器上写一个.my.cnf文件，把账号密码填进去，启动Exporter后它会在9104端口暴露指标。
+3. 让Prometheus抓取：在prometheus.yml里加一个名为mysql的job，targets指向Exporter的地址加9104端口。
+
+
+
+# 部署 Prometheus Stack
+> 如何部署Prometheus Stack
+- 添加helm仓库并更新,它集成了 Prometheus、Grafana、Alertmanager 以及各类 Exporter。
+- 用helm repo list 验证是否添加成功
+
+
+> 配置StorageClass
+创建yaml配置文件，这个文件包含了 ServiceAccount、权限配置、StorageClass 定义以及供给容器本身的 Deployment和对pod资源的操作权限，具体就是
+- 先创建ServiceAccount,在ClusterRole添加pod权限，比如create、delete
+- 用ClusterRoleBinding把sa跟ClusterRole绑定在一起，赋予sa权限
+- 定义Deployment资源，把使用前面配置好的sa，Config挂载到pod,
+
+
+> 访问Grafana
+- 使用NodePort，将Grafana映射到宿主机端口进行访问
+- kubectl get sv 查 cluesterIP 和 port
+- 根据查到IP 和 port 去访问
+
+
+> 导入Dashboard
+- 登录Grafana，点击左侧dashboard，然后在右上方New→import
+- 输入ID，比如输入1860，获取Node Exporter监控面板
+- 选择你的Prometheus数据源
+
+
+> 部署Alertmanager
+- 先配置 Alertmanager 的 ConfigMap，
+就是定义 route 决定告警怎么分组、分发给谁；
+receivers 定义邮件通知渠道；
+inhibit_rules 做告警抑制，避免重复轰炸。
+- 创建一个depolyment,把ConfigMap挂到pod
+- 创建一个Service，用于给 Alertmanager Pod 提供稳定的访问
+
+
+> 配置prometheus规则
+- 配置 PrometheusRule，就是在spec.groups 里定义规则组，
+- 每条规则写 alert 告警名、expr PromQL表达式、for 持续时间，再加 labels 和 annotations。
+- metadata 上打对 label，匹配prometheus release 名称
+- 用kubectl get prometheusrules查看是否生效
+
+> 怎么查询/PromQL
+PromQL 查询我一般按“选指标—算速率—做聚合—出结果”来：先用指标名和标签筛数据，比如 node_cpu_seconds_total{mode="idle"}；
+计数器用 rate 或 irate 算变化率；再用 avg/sum by(instance) 聚合；最后做百分比、比较或数学运算。
+先在 Prometheus 表达式浏览器验证，再放进 Grafana 面板，注意时间范围和步长。这样逻辑清楚，查询也稳。
+
+
+> 如何抑制告警
+- 只告警需要人干预的问题
+- 设置 for: 5m 以上，避免瞬时抖动
+- 用 Alertmanager 抑制：节点挂了就不单独告上面的 Pod
+
+
+
+# 补充
+- 如何分析指标数据，定位性能瓶颈。 
+我一般先定现象，看延迟、错误率、吞吐这些黄金指标，延迟重点看 P95标，锁定异常时间点；
+再用变量和维度下钻到实例、服务、接口；接着对比基线、关联资源指标找瓶颈；最后结合日志和链路验证根因。
+
+- 收到告警后怎么定位和处理的/定位故障
+收到告警先看影响面，严重就先回滚、扩容止血；然后按“指标定范围、日志找报错、链路定慢在哪”逐层定位；修完回写 Git，最后复盘根因。核心就是：先止血，再定位，后复盘。
+
+- 如何维护自动化日志？
+- 怎么和日志/链路怎么配合
+回答中提到将日志发送到集中存储（ELK/Elasticsearch、Splunk或Grafana Loki + 对象存储），并配置轮转和保留策略。
+指标看现象，日志查根因
+
+

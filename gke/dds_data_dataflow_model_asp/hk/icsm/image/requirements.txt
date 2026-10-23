@@ -1,0 +1,10 @@
+--index-url https://Wa3ZF2FB:gfubK11JBr961pyIKSxPdz9h3rnpkfj133coqgTkWZvA@gbmt-nexus.prd.fx.gbm.cloud.uk.hsbc/repository/pypi-group/simple
+--trusted-host gbmt-nexus.prd.fx.gbm.cloud.uk.hsbc
+apache-beam
+apache-beam[gcp]
+google-cloud-storage
+pandas
+pendulum
+polars
+pyarrow
+JPype1

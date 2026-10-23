@@ -1,0 +1,376 @@
+﻿Can be ignored , we transferred the INC to IBIS team
+
+We are planning for VM Refresh Activity (Airflow and RMQ) for ASP PRE PROD Today evening by 5:30 PM.
+This is a request to be available and test the DAGs in PRE PROD for successful execution. We will be sending the email notification for the same shortly.
+
+After completion of activity we will let you know.
+
+HK SIT is not being used by anyone and was agreed to bring that down permanently. Is it not the case? we are ok to take it down..
+
+Hi Akshit, We did not change anything, VM's are using feb 27th images only after that no changes are done.
+
+and team, today evening 5.30PM, we have scheduled EU Preprod VM refresh activity, we need your help to test the DAG's execution after vm refresh. Will ping you once activity starts.
+
+Hi Naveena, we won't be able to test any dag execution without batch cr.
+From what I can observe, there are no import errors and the dag states are fine. Hence, it should be good.
+But, please do monitor tonight's batches and let us know in case of any issues.
+
+We are trying to reach out you , but seems team is not available.
+
+We have received the below alert for HK DDS for Juniper job failure , But the description state MYH_THUB_FEED_CTA_DAILY ,
+Currently we are not supporting any MYH for any use cases , Can you please confirm.
+
+Going forward for DDS pls use this single group which includes GAC , IT and APS Team .
+rest of the groups pls ignore and add the missing team members
+
+Please discuss all incidents, CRs and issues here. Please add anyone who is missing.
+
+Who is working on this from APS team to get this fixed. Please raise a CR this week itself during weekdays to test this…
+
+I want all APS team to have knowledge,
+pls go through the above documentation and see where is the mistake..
+
+and how it was missed during the image bake and next time documentation so its not missed
+Pls share those and will review it and sign off.. these are standards going forward for any such image bake for dataflow nat proxy.
+
+Can you please confirm on this, We have P4 Violation that is csBucketAutoClass for hk dev. Currently these buckets have storage class Standard, but resolution is showing to give archive, can you please suggest us to take action on this violation.
+these buckets all are updated in last year oct, nov,dec & jun  2025 year, can you please suggest to move the storage class standard to archive?
+
+also, module ibis is not found, causing import error for couple of dags used in HASE AP
+
+Siddhesh Rajendra THAKARE Ignore this alert as we are testing latest changes
+
+Keybo S B GUO , I never worked on tf scripts , please share which file to modify or add , so that I can take care in feature
+
+Can you please check on the NAT proxy image difference in PROD and Pre PROD. we need to understand the rca why issue came in connectivity in prod with bapi
+
+No. in PRE PROD , bapi executed as expected in pre prod.
+
+Likitha MDWIA, Vaishnavi UTKURU, can you please raise an INC and share the number for this, will need to access GCP console.
+
+The issue has been fixed. And I have reran the BACKUP DAG for UK_CC. It should run properly for today's scheduled run.
+
+There was a syntax issue in the backup_common_config.yaml file. We included new tables to be considered for backup. We have updated the file to resolve the issue.
+// included 纳入
+
+CR creation and implementation for Project related work items , ownership lies with Devops and GAC team, APS team is responsible for post deployment activities and support.
+
+for enabling the api bigquery data transfer, for p4 violation remediation in asp uat env.
+
+Inform them upfront so the DevOps team can remediate.
+
+Likitha MDWIA please ignore MTD failures in uk preprod for now, we are checking it out.
+
+Can you please approve this? We are adding a line in the script file to view error logs for the NAT proxy image refresh.
+
+check the following link, logs are also not being populated to identify the root cause.
+
+yes re‑run works in such cases, but the logs are unavailable so exact cause of failure is unknown mostly
+
+yeah, re‑run fixes most of the times. but full E2E is very rare to complete without ambiguous failures
+
+Logs are also not available during failures, neither in Airflow nor in the GCS bucket.
+
+!!!, currently we are refreshing nat proxy vm with newly baked image in ASP Preprod environment. Once refresh done will let you know, For testing we need to execute the dynamic_bapi_amh_nc DAG.
+
+Nat Proxy vm refreshed with newly baked image, for testing we executed the Dynamic_Bapi_DAG , it ran successfully.
+
+is there is limit on number of parallel dataflow jobs that I can have in uat with same machine type? right now I am trying to launch 9 and if fails for atleast 3 of them, if possible can we increase for certain period of time to 10 or so?
+//number
+
+I requesting you to get us an incident for investigating the issue.
+
+The Dataflow job failed on the customer column family due to an internal issue. Data seems to be fine. Re-running the job fixed the issue.
+
+team, We have refreshed the NAT Proxy Image in ASP Prod environment and the day 1 batch post deployment was successful for Dynamic_Bapi_AMH_NC DAG.
+
+why are we enabling the notebooks etc, lets not do those unless we have architecture approval. these are all not approved to use within HSBC upto prod, also it has cost implications !!!
+
+New APIs pls dont enable without my knowledge , it has cost implications and we should have design authority approvals and architecture has to update it.. its not enabling API and moving till production.
+
+!!! also we need to trigger cyber approvals too and seek certifications
+
+Pls ignore this. This is a check if any new data is available in the source table. It is possible that we may not get any new data for 2‑3 days. However, this needs to be highlighted if we receive this alert for more than 3 days continuously.    //
+
+This looks like a temporary issue with the GCS FUSE, due to which airflow was not able to find the required files. I see subsequent runs have been successful with no issues.. We are good to close this INC .
+INC51791703. TIA.
+
+seems its common across all GCP projects.
+
+Sure Keybo, we can schedule the KT session next week for deployment and discussion on the changes .  //安排
+
+We are checking Postgres to BQ for one of the use cases. The team is assessing the feasibility.
+----------------
+Hi Puneeth, if this account is required, then we would be needing to change this into an IAM account. will check on this further and get back
+
+Keybo was testing airflow upgrade on HK DEV env. , as per the details, there were some airflow package import errors post deployment of the instances . He was working on resolving the errors.
+
+there is some question from senior mngmt.. pls help answer this one !!
+
+n DDS ASP UAT DEV we have computeDiskUnattachedMoreThan30d violation. The following disks are not being used. Can we delete those disks or keep them.
+
+Need to validate the mismatches identified by risk as part of AIBRS Implementation in ASP Pre Prod Env for April 2026 run
+
+Sure , but please use this INC for investigation purpose only..
+
+while airflow upgrading 2.10.5 in HK dev, we are getting import errors with apache‑airflow‑providers‑google==12.0.0 , for this version the following operators not available, can you please check once from dag side , update it accordingly
+
+got it, sure will change. If these changes need to be moved to preprod/prod please ask c48 guys for testing these changes as well
+
+Sure Akshit, let us know once done the changes. we are stuck here, need to upgrade other envs.
+
+seems like internal dataflow issue. need to clear state of the failed task in BTB DAG (don’t clear in E2E) and it will start again. then mark the btb task in e2e as successful so that backup DAG task can start.
+
+if there is no change in image deploy and it still need to run then we need to rise an exception.
+
+Seems like Data is lagging a lot this month, 4th and 6th working day were 09/04 and 11/04 (as per C1 and C2 data ingestions)
+
+Please write an email to IBIS to confirm whether this lag is expected, and when we’ll get the C3 cycle data (loop in Anuradha, Avisek, GAC_DDS_Attr_Build_Team_ASP)
+
+We don’t need to do anything in the pipeline, data will be ingested automatically when source has it
+
+Team , we have scheduled Airflow & Rabbit MQ version upgrade in ASP Preprod env, today 5.30 PM, Once changes are done will let you know, Need to test the DAG’s.
+
+Hi Team, we are postponing the deployment, because architect approval we did not receive, jasmine is on leave. No one responding from her team .
+
+okay thanks, also Hreetik was facing some issue creating bigtable instance in preprod, seems CMEK issue. It will be needed whenever we need to do testing, so support us on it
+
+We have upgraded the Airflow & RMQ version in ASP Preprod env, as per the current status all the health check with respect to Airflow & RMQ looks good.
+Can you please help to test thoroughly for all use cases in DDS ASP Preprod env & provide your confirmation.
+
+Naveena Kumari ATTULURI please share batch CR also help us make bigtable instance to test APM_CLI, Hreetik was unable to do so last time
+
+APM_INC and APM_CLI ran fine, had 5 api call failed error in bapi but that is not related to airflow VM image and within error tolerance given it was ran with old CLN file available in preprod.
+
+We are observing some issues Health check not in the Green state. We may have to backout the change for now
+
+Need to validate the mismatches identified by risk as part of AIBRS Implementation in ASP Pre Prod Env for April 2026 run
+
+it was due to internal error, authentication failure with preprod service account. you can clear the failed backup dag task and let it resume from that point, if needed.
+
+you can mark it as success in the E2E DAG task, don’t clear the task.
+
+, can you please test the ICSM DAG’s in ASP Preprod env, we have upgraded the airflow and rmq versions, once testing completed let us know so that will proceed prod env.
+
+Hi Keybo S B GUO, i have updated in uk whatever changes are there in asp, now RMQ vm’s are not spinning up .
+
+I am upgrading airflow & rmq in EU UAT env, in the terraform code changes alert‑api‑key not created in UAT env, do we need to create a secret with same uk dev value.
+ 
+Hi team, we are getting the provider issue of terraform while using G3 for deployments are you guys getting the same issue
+Yes yesterday also it worked using G3
+ 
+It seems terraform.rc file managed by G3 is giving issue.
+ 
+In Jenkins we have our own terraform.rc is working.
+Exactly it worked yesterday.
+ 
+The problem is terraform.rc file of g3 we can't manage
+ 
+That is internal to G3 team.
+ 
+Can we raise a ticket to G3 with this issue.
+ 
+Actually Vamsi Krishna JAKKULA if you remember some time back we got a ask when the wizard was down we got instructions from Jenkins team to point it to nexus in terraform.rc, and the same thing is managed by the G3 internally.
+ 
+if the control is with G3 and we can't do much about it.
+ 
+and ask for guidance as what to do in future to avoid this
+ 
+Hi team, this issue is resolved now for G3 upon raising an incident to G3 team, they have shuffled there terraform.rc and it started working.
+ 
+Kindly check your pipelines its working for us now.
+ 
+Container analysis API has enabled in cl3-UAT , it seems false-positive violation
+ 
+did they tell what was wrong? we have mirrors on nexus also now, which should be stable, wonder which one G3 is using
+ 
+Yes there nexus credentials were old so they reshuffled it.
+ 
+i 'll check with juniper team
+ 
+Please help to provide RTB and exceptional approval for below CR's
+ 
+DDS (GAC + IT+ APS)
+ 
+mostly aip request timeout issue, please reach out to Himanshu
+ 
+Hi, Vaishnavi. This is the expected behavior. This alert is if there are no new records in the source table. It is possible that there might be no new records for 2-3 days. It is only an concern if this alert is received for more than 3 days.
+
+We have received resourceViolationInvalidServiceAccountKey violation for HK DEV & UAT for artifact registry SA key. Can you please confirm if we are using the key and need to be rotated or if it can be deleted.
+This is due to internal issue. You can clear the failed task in BTB_UK_ALL dag and let it run again. Then in E2E_UK_MPO mark the btb task as success and let it run backup task.
+ 
+Today we have moved all ICSM DAG code to HK SIT bucket(ddshk-sit-dds-data-asp) but the DAGs are not available in airflow (Airflow), not even in failed state.
+Sakshi was doing some preprod testing on Friday, we can ignore it.
+hmm let me ask Sakshi, it is not suppose to run in preprod as we don't keep BT instance up and running in preprod hence BTB is failing
+As we don't keep BT instance up , hence it failed ,We have make it up till Friday for testing purpose ,Please ignore the alert !
+there is discrepancy of one record
+Updated the changes for alert api in both ASP & EU preprod envs, testing also done, getting xmatter alerts for both the regions
+ 
+DDS HK Dev Image refresh completed successfully. HC is good for Airflow and RMQ
+No import errors and shared below screenshot for reference.
+ 
+i think current issue with cred id Docker_Config, because docker was not able to push the image with authentication issue, in docker_config file we are providing the docker image credentials before creating the new credentials , we need current credentials of docker_config, so currently @Jun Wei Chen is working on this.
+seems like basic storage threshold alert, we will look into this
+ 
+can you please approve the pr, opting out the GKE firewalls, so that p2 violation will be remediated, because in future we may need these firewalls , so not deleting.
+ 
+MOH UMAIR credencial fixed, currently blocked on python image pushing,stil in progress asking puneeth to check code for push
+Hi Jun Wei CHEN, From DDS end the code base is not changed. I feel it is unable to download the python from nexus due to some credential issue. Can you please check and do the needful.
+ 
+can you please approve the pr's, these are for assigning permissions to the airflow service account & artifact registry for key creation
+PR's for sot file changes
+ 
+I received alert regarding A
+
+These are not DDS alerts and incorrectly getting routed to DDS queue
+what is the threshold? This is the Attribute master history and is supposed to maintain history for 7 years.
+Hello. This is just for the data stored in the table. We maintain history there, that's why lot of data
+We need to see what all BQ jobs ran that day.
+ 
+and Team, we have refreshed VMs with new images in UK DEV. Can you please help us to test the DAGs in UK DEV. So that we will plan for other environments. If any issues please let us know.
+We have scheduled the CR for Airflow upgrade 2.10.5 in EU Prod for this weekend July 26th at 7am IST. We need your on-call support during this activity. We have successfully upgraded airflow version in all lower environments, post upgrade all health check is fine as expected and DAGs also executed successfully in Pre Prod environment.
+Once the refresh is completed successfully, we will notify and will monitor the daily night batches.
+yes i think we should be good with that. Akshit/Puneeth please confirm if you are doing anything in SIT
+yeah we good, Puneeth is not there, but it seems he is also doing changes in hkdev only
+ASP Preprod vm Refresh completed successfully, post refresh all health check good.
+and team we are performing VM refresh activity in ASP PRE PROD. After implementation we will let you know, please test the DAGs
+We are implementing Cert renewal CR's for EU & ASP PRE-PROD environments.
+ 
+any xmatters? Seems bapi cannot reach out to sas id, waiting for error table to populate to see actual error log
+okay dataflow is definitely going to fail for bapi I can see all the calls failing
+the AMH_NC dag ran fine and within almost similar times to previous runs till end except bapi in ASP preprod. Cancelling the bapi job
+You can see following logs from dataflow worker for bapi job created while testing AMH_NC, please have a look.
+You can find this by rerunning this query in preprod -
+as you mentioned, once this is sorted, you will create BT for us then we will test run AMH_CLI DAG as well
+can you please test the DAGs and I have created bigtable instance. Please use the following incident.
+ 
+this was due to the nodes utilization being above 80% for some time. it was normal since we did a full refresh test run. these alerts are triggered by casual spikes as well during incremental runs. can be ignored as of now.
+this alert isn't applicable because a dataflow job can run for some time based on the amount of data being processed. requesting you to increase the threshold in the alert configuration or remove it altogether.
+bigtable cluster usage alerts are safe to ignore as of now. we can increase the number of nodes in the clusters but alerts will still be triggered due to random spikes.
+Then what if there is sudden spike in BT CPU during our UK batch runs ? still they can be ignored ?
+
+yes i think you are receiving those alerts daily around 2 AM for UK MPO batch runs
+there are no such alerts in place from our end, these seem to have been setup within infra
+we will still take a look just to be sure, but we haven’t coded any such alerts
+Okay please do cross check once if nothing hardcoded
+let us know so that we can check witt INFRA team on this
+yea sure. please check infra as well cause im sure it’s not at our end. will still take a look
+ 
+Since we ran it before schedule (compared to prod), it could not find the data to ingest for daily table for that day
+Please Ignore the alerts in UK Pre Prod for BTB_UK_ALL Dag ,if any (today till 5 pm),performing testing.
+We have scheduled the CR for EU PRE PROD VM Refresh today at 04:30PM IST. Once the refresh is completed successfully, we will notify you so that you can proceed with the testing DAGs.
+All Non Prod environments are continuously running from yesterday onwards, night time did not auto shut down.
+Jenkins seems to be down with 504 since last few hours. Requesting you to look into it, we had a deployment planned today.
+we have upgraded the airflow successfully to 2.10.5 version in EU PRE PROD. Can you please do a sanity test.
+We have DAG execution during batch time and we’ll monitor the performance of DAGs.
+Can you please verify the results of EU PRE PROD for batches in past 2 days and provide the confirmation. So that will proceed with prod env.
+ 
+one thing to validate will be that if this SIGTERM happened due to any new configuration setting from the airflow upgrade. rest all should be fine.
+Hi Siddhesh, clearing the failed task should be enough for this case. Meanwhile, we will also look into adding retries to these dags. Ideally, sigterm shouldn’t be happening. Please check if the VMs downscaled drastically. Previously, the scheduled downscaling was interfering with MPO process.
+Airflow vm running with One instance, if we increase the no of vm’s min 3 and max 6 ,is this help to fix the issue? present it is min1 & max 6 .
+the number of instances is fine but the scaling schedule timezone is in UKT instead of UTC. this might be the reason why sigterm was caused as the end time might be interfering with MPO pipeline a lot. Please change the schedule so that all the current scheduled dags are covered
+ 
+We are now facing issue with Image bake for Airflow 2.10.5 version on DDS EU and ASP PROD environments.
+As per confirmation from Elvis, Airflow version need to upgraded to 3.2.1 . Can you please confirm if we can give a go ahead for the activity in Dev environment for DDS services for ASP and EU.
+UK MPO Dag failing with SIGTERM error in EU Preprod
+
+DDS APS + DevOps
+ 
+Hi Keybo S GUO, are you available today, we are planning to do EU Preprod Airflow upgrade , but UAT still RMQ vm's are not spinning up automatically, can we deploy it EU Preprod ?
+No space available on Disk, DAG failure
+Issue fixed for EU UAT , RMQ VM able to spinning up automatically, lets monitor for tomorrow also then will proceed EU Preprod env. For EU UAT Prechecks one RMQ vm only up so i setup one vm only.
+api’s are enabled and config editor role assigned to airflow sa but issue with big query user group , need to create another cr ,
+VMs are up and Health check DAG running fine and connections are also established.
+ 
+yes tried all the dates from may 29th , but table itself not found
+we are doing image baking in hk dev getting above error, is this fine to do refresh ?
+Build success, Airflow vm created but RMQ vm's are not spinning
+we have this error for EU UAT airflow image baking pipeline. we are proceeding with VM refresh
+i tried with impersonate service account but it is not accepting
+after restarting airflow also RMQ connections are still showing 0
+any update on airflow connections to rabbitmq. Can you please take this on priority.need help in the assigning the permissions to Bigquery
+ 
+We are deploying the New Images for ASP PRE PROD , Current Airflow version is 2.10.5 and what process we need to follow in case of backout. as ASP PRE PROD is already on 2.10.5.
+ASP PRE PROD is already on 2.10.5 and today we are deploying new image for 2.10.5 . Last time we backed out to 2.9 version .
+can you please do the changes for preprod image baking and tf code changes. Because lot of code changes are there and removed -dbt also, so update the code changes accordingly.
+ 
+we tested the backout pipeline with the feature/MWCDSFS-5817/g3ConfigureUpdate branch in ASP PRE-PROD. but we are getting error. can you please help to check on this
+ 
+For bigquery assigning permission with impersonate service account only working, tested in hk dev env
+EU Image baking branch is this one only right for all EU envs
+Lets have a quick call on this please
+DDS is pending with Airflow upgrade.. need to complete it asap for prod... violations count is increasing
+as the violations might get overdue and application might be put into embargo
+ 
+The issue is not just infra as per keybo
+can you please analyze with Elvis H J JIAO and let me know together !!!
+when you are ready , do let me know ,would like to review it..its not an easy requirement..
+ 
+If Everything looks good we will plan CR for VM refresh tomorrow evening at 4:30 PM IST. Can you please confirm your availability during that window.
+
+EU UAT airflow URL is not accessible since morning after executing the G3 Deployment pipeline, In this scenario is it acceptable to deploy in EU PREPROD via G3 . ?
+We have PRE PROD CR in next one hour. Please confirm if we can go ahead ?
+No, Manual destroy for UAT was not done . same image was re-deployed during the Non PROD execution for G3 Release Work Item .
+Once your confirmation we will proceed with VM refresh in EU PRE PROD
+Are we good to proceed with the deployment to PROD based on the above finding .. and what are the chances of the run time increment not occurring in PROD
+will find out a latest version as sample and share here
+Regarding Airflow upgrade to 3.2.2 version, are we ready from Infra side for this activity ? Can you please confirm for both DDS EU and ASP ?
+if any additional changes are required
+We are planning to do VM Refresh in EU PROD with airflow 2.10.5
+ 
+
+
+
+##Airflow Upgrade to 3.x
+We are working on testing the DDS UK dags in airflow3. I can see the root directory is setup as "/opt/airflow/dsx_airflow" in the image it should be "/opt/airflow/dds_airflow/". Can you please take a look.
+Airflow 2 in HK dev is not pointing to the correct root directory
+since mine is a local setup, im using LocalExecutor instead of celery and a mysql db setup, along with local paths. you can modify stuff accordingly
+requesting you to enable triggerer in your deployments. that is needed for running sensors in deferred mode.
+This is how i used to enable it in the VM manually
+sure! my config files are for reference and unrelated to gcp airflow deployments. nothing is modified in gcp VMs
+that local testing is actually being done in parallel on the latest public airflow version in a separate setup in the DSW project to ensure we don’t miss anything. we use that setup in BAU to test with actual data before moving to preprod.
+P4 violations are being handled by our automation jobs and are expected to be remediated by tomorrow.
+this is not getting resolved, I have set the airflow variable twice, it seems, it has to be baked in with env, region. project_id kind of vars, can we do that?
+Also, raising an xmatter alert fails the dag, which should not be the case. Can we please look into it?
+true, but it impacts testing, sometimes if data is not available, we raise an alert and continue, that part is not happening, and since the task fails it does not push xcoms needed for downstream tasks, so forcefully marking it as success won’t work
+
+##Infra Resourcing Co-ordination
+As per my understanding this should be adjusted from 6th Apr till 29th May'26.
+there is a change in allocation from May onwards,
+welcome back, you can please refer the allocation at the link
+based on this, Pioneer allocation has been uploaded and this entire Infra Resourcing allocation was already reviewed with Visha
+Let me setup a call to get the same fixed with you, Vishal & Vamsi as the current allocation was agreed with them.
+He asked for 6 or 7 resource from Infra side .. thats what i remember and that was taken care ... Anyway, this need to solve if someone is facing issue ..
+ 
+Hi Saifali MULANIVivek DANEJ there seems to be no active Clarity profile yet for Saifali. Once there is active profile, then only Nagaraju JAKKAM would be able to assign Clarity Line.
+I can see Pioneer Allocation is correct, would need to understand if you can please try adding using Self Service Staffing the related Project Code/Task Code.
+I tried adding it using self service staffing the request has been completed I got the mail as well but I do not see the task to apply in clarity.
+Sometimes, there is a lag to get the relevant task added post Self Servicing-Staffing request completion. You can please clear Browser cache, and re-login to Clarity.
+for a quick call, after trying all the steps above, its still not working, so we need to check with Nagaraju JAKKAM as to what the issue would be.
+basis that there are changes being suggested which we will be updating for Pioneer Upload, accordingly we will let you know your new Clarity allocati
+I am able to adjust clarity for all other week except jun1 - jun7. the older task is failing to adjust and still show 8 8 instead of 0 0. would you be able to help
+ 
+
+
+##C48 + DDS - UAT TESTING
+This is the same issue which occurred in the past as well.
+Data volume hasn’t changed much compared with the past. I’ve also shown the data volume differences to elvis
+As per Devops team Elvis, post increase of CPU the run time for DAG Seq - 15 reduced to 30 min .
+This suggests the upgrade changed runtime environment/resources, while your DAG still has a CPU-heavy Python section (the iterative customer loop). python_threads=1 .
+After the optimization the py, run time had reduced to 6 mins. So can you please confirm if you are comfortable to change the CPU or the py code optimization.
+SDI UAT dag failed due to permission issue. Elvis H J JIAO is looking into issue.
+
+yes , there is a default permission setup at code level. It grants schema/table access and sets default privileges for new tables created by api-user.it only applies when tables or schemas created by code.
+which is not created by code , tables/schemas owned by another role still need explicit GRANT or ownership update
+any other permission apart from that should be given manually Harshavardhanl REDDY?? by granting specific user and permission on that table?
+If the table owner is api-user and MS also runs as api-user, no extra manual grant is needed.
+Manual grant is needed only when a different user/service account must access the table.
+hm ok here like dds is trying to access the C48 DB.
+Yoheswaran S, do you suggest what was the approach followed for having the permissions setup previously? in dev, sit, uat and higher envs ? previously?
+DDS code does not contain explicit PostgreSQL GRANT statements. Connection and authentication are handled via generate_and_set_token() and create_update_connection(), but table-level permissions are assumed to be pre-configured in the C48 PostgreSQL instance. This applies for all envs
+Once probably you can give a try now.
+when checked in prod , there is a role for dds and its having read access on specific set of tables.
+in uat also we could see a role for dds and having now the read access to tables
+
+
+

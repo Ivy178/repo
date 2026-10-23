@@ -1,0 +1,31 @@
+# group_vars/all.yml
+---
+# 补丁更新相关配置
+patching:
+# 是否允许重启
+allow_reboot:true
+# 重启前等待时间（秒）
+reboot_delay:30
+# 重启超时时间（秒）
+reboot_timeout:600
+# 更新后健康检查等待时间
+health_check_delay:60
+# 排除的包（某些包不想自动更新）
+exclude_packages:
+-kernel*
+-docker*
+# 仅安全更新
+security_only:true
+
+# 通知配置
+notification:
+webhook_url:"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+enabled:true
+
+
+
+# 参数说明:
+•allow_reboot:是否允许自动重启。数据库这类有状态服务建议设为 false,手动处理
+•reboot_timeout:重启超时时间,老机器启动慢的话需要调大
+•exclude_packages:排除列表,避免误更新关键组件
+•security_only:只安装安全补丁,不做全量更新

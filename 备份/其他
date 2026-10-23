@@ -1,0 +1,103 @@
+面试官，我分几点说：
+
+# 服务器相关
+> CPU 飙高排查
+先 top 看整体，是哪个进程高。如果是 Java，top -Hp pid 找高 CPU 线程，把线程 ID 转 16 进制，printf "%x\n" tid，然后 jstack pid | grep -A 30 nid=0x... 定位堆栈。如果堆栈不明显，用 Arthas 或 async-profiler 抓火焰图。同时看 jstat -gcutil 是不是 GC 频繁，GC 也会吃 CPU。
+
+> 定位到具体代码行
+就是上面那套：top -Hp → 转 16 进制 → jstack 找 nid → 看类和方法。如果是 GC 问题，查 GC 日志和堆内存。工具用 Arthas 的 trace 或 profiler 最直接。
+
+> 高并发和容量规划
+接触过，反欺诈峰值 QPS 1000 到 2000。容量规划先压测，测出单 Pod 能扛多少 QPS，比如 200。峰值 2000 除以 200 等于 10 个 Pod，再乘 1.5 到 2 倍冗余，大概 15 到 20 个 Pod。节点按每台能跑多少 Pod 算，留 30% buffer，配合 HPA 自动扩。
+
+> 安全
+服务器加固：SSH 密钥登录、禁 root、最小权限、关多余端口、定期补丁、防火墙。漏洞扫描：Trivy 扫镜像，Nessus 扫主机，CI 集成，高危阻断。K8s 侧用 RBAC、NetworkPolicy、Secret 加密、镜像签名。
+
+
+
+> SRE 理解和指标，99.99 故障时长
+SRE 就是用软件工程方法做运维，核心是用 SLI/SLO 量化稳定性，用错误预算平衡发布和稳定。
+常见指标：SLI（延迟、错误率、吞吐）、SLO（目标可用性）、SLA（对外承诺）、错误预算、MTTR、MTBF。
+99.99% 一年故障约 52.6 分钟，一个月约 4.38 分钟。
+
+> 线上服务突然超时，应急流程
+先止损：确认影响范围，看监控大盘，紧急回滚最近发布、重启实例、切流量或限流。
+同时通知相关方，拉群同步。核心原则：先恢复，再定位。
+
+> 重启后还是超时，下一步排查
+按依赖顺序查：
+
+· 下游：DB 慢查询、连接池满、Redis 延迟、第三方接口超时。
+· 资源：CPU、内存、磁盘 IO、网络带宽、GC。
+· 中间件：Kafka 积压、MQ 堆积、ES 慢查。
+· 应用：线程池满、锁竞争、日志阻塞。
+  用链路追踪、火焰图、慢日志定位具体瓶颈。
+
+
+
+
+> NFS：网络文件系统，基于 RPC，让客户端像访问本地文件一样访问远程文件，属于共享存储，常用在 K8s 多 Pod 共享持久化数据。
+> 软链接和硬链接区别：硬链接是多个文件名指向同一个 inode，不能跨文件系统、不能链目录；软链接是独立文件，存目标路径，可跨文件系统、可链目录，目标删了会悬空。
+> 哪个影响 inode：硬链接共享 inode，只增加引用计数；软链接会新建自己的 inode。
+> 孤儿进程：父进程先退出，子进程还在跑，被 init/PID 1 收养。僵尸进程是子进程退了但父进程没回收。
+> 负载高：load 是运行队列和不可中断 IO 的平均进程数，不只 CPU。常见 CPU 密集、IO 等待、内存 swap、锁竞争。排查用 top/uptime、vmstat、iostat、pidstat，看 r 队列、b 列、D 状态进程和磁盘 IO。
+
+> cache 和 buffer 区别
+cache 是缓存，为了加速读，存热点数据，比如文件缓存；buffer 是缓冲，为了协调速度，攒一批再写，比如写磁盘。核心：cache 为读，buffer 为写。
+
+> Swap 作用
+物理内存不够时，把不常用的页换到磁盘，防 OOM，但性能差。核心：应急，不是扩展内存。
+
+> Linux 监控命令
+top/htop 看 CPU 内存，vmstat 看整体，iostat 看磁盘，free 看内存，ss/netstat 看网络，df/du 看磁盘，sar 看历史。核心：CPU、内存、磁盘、网络。
+
+> tcp三次握手，为什么要三次？它靠谱在哪？哪些场景下使用？
+三次是为了确认双方收发能力，并防止失效连接请求突然到达。两次不够，四次多余。
+靠谱在于序列号同步，是可靠传输的基础。用在 HTTP、SSH、数据库等需要可靠传输的场景。
+
+> 8080 端口不通排查
+先看服务起没起，ss -lntp | grep 8080；再看防火墙和 iptables；然后看安全组；接着 telnet 或 nc 测；
+最后看应用绑定的是 0.0.0.0 还是 127.0.0.1。核心：服务、监听、防火墙、网络、绑定地址。
+
+> 怎么抓包
+用 tcpdump，指定网卡、端口、主机，比如 tcpdump -i eth0 port 80 -w a.pcap，然后 Wireshark 分析。K8s 里进 Pod 抓，或节点上抓 veth。
+
+> 查看连接数和异常状态
+ss -s 看汇总，ss -ant 看明细。重点看 CLOSE_WAIT 太多，说明应用没关连接；TIME_WAIT 多正常，但太多可调内核参数；SYN_RECV 大量说明可能被 SYN Flood；ESTABLISHED 正常。
+
+> CPU 高排查
+top 看进程，top -Hp pid 看线程，Java 用 jstack 定位，vmstat 看上下文切换，iostat 看是不是 IO 等待。
+
+
+> 磁盘 90% 处理
+先 du -sh /* 找大目录，find 找大文件，清理日志和临时文件，lsof | grep deleted 看已删但被占用的文件，然后扩容或归档。
+
+> 网络请求慢排查
+ping 看延迟，traceroute 看路由，curl -w 看 DNS、连接、首字节各阶段，mtr 看丢包，tcpdump 抓包看重传。
+
+
+> 常用Linux命令？
+ps，top，netstat，df，du，free，grep，awk，sed，find，curl，telnet
+
+
+> 一条命令删 2026-02 和 2026-03 日志
+rm -f *2026-0[23]*.log
+如果带路径就用 find /log -regextype posix-extended -regex ".*2026-0[23].*\.log" -delete。核心就是正则匹配月份。
+
+> 查看打包文件的编译类型
+先 file 文件名 看是 ELF、脚本还是压缩包。如果是 ELF，用 readelf -h 看架构，readelf -p .comment 或 strings | grep GCC 看编译器版本。核心就是 file 加 readelf。
+
+> 僵尸进程处理
+僵尸进程是子进程退了但父进程没回收。先 ps aux | grep Z 找到，看它的父进程 PID。处理办法：给父进程发 SIGCHLD 让它回收，
+或者杀父进程让 init 收养。但杀父进程要小心，核心是解决父进程不回收的问题，不是杀僵尸本身。
+
+
+> 文件内 a 替换成 b（静默模式）（Citi）
+sed -i 's/a/b/g' 文件名 
+
+
+> TCP 中 TIME_WAIT 状态（Citi）
+面试官，TIME_WAIT 是主动关闭连接的一方，在发送最后一个 ACK 后进入的状态。
+它会等待 2MSL（最大报文段生存时间），目的有两个：一是确保对方能收到最后的 ACK，对方没收到会重发 FIN，这边还能响应；
+二是让本次连接的所有旧数据包在网络中消失，防止干扰新连接。
+如果服务器出现大量 TIME_WAIT，会占用端口，可以调内核参数如 tcp_tw_reuse 来复用，但生产环境要谨慎，别乱开。

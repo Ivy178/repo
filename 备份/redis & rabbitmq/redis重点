@@ -1,0 +1,91 @@
+Redis 运维重点可以概括为：架构与容量、监控告警、内存与 Key 治理、持久化备份、高可用、性能延迟、安全、变更与演练。核心目标是：低延迟、高命中、数据尽量不丢、故障能切换、容量可控。
+
+1. 架构与容量规划
+
+· 明确用单机、主从+Sentinel，还是 Redis Cluster。
+· 主从+哨兵：重点看复制延迟、哨兵 quorum、脑裂。
+· Cluster：重点看槽分配、节点状态、扩缩容、migrate、集群总线。
+· 内存使用率建议控制在 70%~80% 以下，给 fork COW、复制缓冲区、客户端输出缓冲区、碎片留余量。
+· 规划 QPS、连接数、带宽、磁盘 IO，避免只盯内存。
+
+2. 监控告警
+
+必须覆盖：
+
+· 可用性：PING、主从状态、Sentinel/Cluster 状态。
+· 内存：used_memory、used_memory_rss、mem_fragmentation_ratio、maxmemory、evicted_keys、expired_keys。
+· 性能：QPS/OPS、延迟 p95/p99、慢查询、latency、CPU、网络。
+· 持久化：rdb_last_bgsave_status、aof_last_bgrewrite_status、aof_last_write_status、latest_fork_usec。
+· 复制：master_link_status、master_repl_offset 与 slave_repl_offset 差距、repl backlog。
+· 集群：cluster_state、cluster_slots_assigned、cluster_known_nodes、cluster_size。
+· 客户端：connected_clients、rejected_connections、blocked_clients、输出缓冲区。
+
+告警重点：主从断连、复制延迟大、内存超阈值、出现 evict、持久化失败、集群 fail、连接数突增、慢查询增多。
+
+3. 内存与 Key 治理
+· 设置 maxmemory 和合适的 maxmemory-policy，如 allkeys-lru、volatile-lru、allkeys-lfu。
+· 定期扫描大 Key、热 Key：redis-cli --bigkeys、--hotkeys、memory usage、SCAN。
+· 大 Key 删除用 UNLINK 或渐进式删除，避免 DEL 阻塞。
+· 避免无过期时间的 Key 无限增长，合理设置 TTL，但避免同一时间大面积过期。
+· 关注内存碎片，必要时开启 activedefrag。
+
+4. 持久化与备份
+· RDB 适合全量冷备，AOF 适合增量，Redis 4+ 可用混合持久化。
+· AOF 常用 appendfsync everysec，平衡性能与丢失窗口。
+· 关注 fork 阻塞、磁盘 IO、AOF 重写。
+· 备份必须异地、定期恢复演练；不要只备份不验证。
+· 从节点做备份，避免影响主节点。
+
+5. 高可用与故障切换
+· Sentinel 至少 3 个奇数节点，理解 quorum 和故障转移流程。
+· Cluster 至少 3 主 3 从，关注 cluster-node-timeout、cluster-require-full-coverage。
+· 配置 min-replicas-to-write、min-replicas-max-lag，降低脑裂写丢失风险。
+· 定期做主从切换、节点故障、网络分区演练。
+
+6. 性能与慢查询
+· 禁止在生产使用 KEYS、大 HGETALL、大 SORT、长 Lua 脚本、长时间 MONITOR。
+· 配置慢查询：slowlog-log-slower-than、slowlog-max-len，定期分析。
+· 使用 Pipeline、连接池，避免频繁短连接。
+· 注意 Redis 命令处理主线程是单线程，慢命令会阻塞所有请求。
+· 客户端设置合理超时、重试退避、熔断，避免重试风暴。
+
+7. 安全
+· 禁止公网暴露，配置 bind、protected-mode、防火墙。
+· 启用密码、ACL、TLS，旧版本可 rename-command。
+· 最小权限，区分应用账号。
+· 定期排查未授权访问、异常命令、异常连接。
+
+8. 客户端与缓存治理
+· 连接池大小合理，避免连接数打满。
+· 防缓存穿透：空值缓存、布隆过滤器。
+· 防缓存击穿：互斥锁、逻辑过期。
+· 防缓存雪崩：过期时间加随机、多级缓存、限流降级。
+· 读写分离时注意主从延迟导致的数据不一致。
+
+9. 日常巡检建议
+· 每日：集群/主从状态、内存、连接、慢查询、持久化状态、备份结果。
+· 每周：大 Key/热 Key、容量趋势、碎片率、过期策略。
+· 每月：故障切换演练、恢复演练、版本与配置基线检查。
+· 变更：配置版本化，升级先从后主，Cluster 滚动升级，变更后重点观察延迟和错误率。
+
+一句话总结：Redis 运维不是只盯内存，而是围绕“监控、容量、内存 Key、持久化、高可用、性能、安全、演练”做体系化保障。
+
+
+
+
+
+
+
+
+
+
+
+
+Redis 运维重点就一句话：保稳定、保性能、保数据。
+具体分四块：
+第一，高可用，主从加哨兵或集群，防单点，盯主从切换和脑裂；
+第二，监控告警，重点看内存、连接数、QPS、命中率、慢查询、主从延迟和持久化状态，提前发现大 key、热 key；
+第三，容量和内存，设好 maxmemory 和淘汰策略，大 key 拆分，热 key 分散；
+第四，持久化和安全，RDB/AOF 配置、备份恢复演练，密码 ACL、网络隔离、多实例隔离。最后，扩容、迁移、重启要有预案和演练。
+
+总结：开发关心怎么用，运维关心它别挂、别丢、别拖垮。

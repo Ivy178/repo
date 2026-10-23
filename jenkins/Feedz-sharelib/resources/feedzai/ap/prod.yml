@@ -1,0 +1,25 @@
+global:
+  environment: "Prod"
+  project_id: "hsbc-11941970-feedzaiap-prod"
+  shared_project_id: "hsbc-6320774-vpchost-asia-prod"
+  region: "asia-east2"
+  zone: "asia-east2-b"
+  kms_project: "hsbc-6320774-kms-prod"
+  xmatters_api_host: "alertapi-uat-systems.uk.hsbc"
+  xmatters_api_id: ""
+  gcp_proxy: "googleapis-prod.gcp.cloud.hk.hsbc"
+  gcp_proj_number: "636754462658"
+
+networking:
+  shared_network_name: "hsbc-6320774-vpchost-asia-prod-cinternal-vpc1"
+  shared_network_subnet: "cinternal-vpc1-asia-east2"
+  default_hasb_network_name: "hsbc-default-network"
+  cinternal1_network_name: "hsbc-11941970-feedzaiap-prod-cinternal-vpc1"
+
+imageFactory:
+  base_env: "DEV"
+
+gke:
+  cluster_name: "gke-t2-ce0299"
+  kubectl_proxy: "10.92.30.192"
+  storageclasses: ["premium-rwo-cmek-prod"]

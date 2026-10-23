@@ -1,0 +1,25 @@
+listeners.tcp = none
+listeners.ssl.1        = 5671
+ssl_options.verify     = verify_none
+ssl_options.fail_if_no_peer_cert = false
+ssl_options.cacertfile = /etc/pki/tls/certs/ca-bundle.trust.crt
+ssl_options.certfile   = /etc/pki/tls/rabbitmq-node.crt
+ssl_options.keyfile    = /etc/pki/tls/rabbitmq-node.key
+
+auth_mechanisms.1 = PLAIN
+auth_mechanisms.2 = AMQPLAIN
+auth_mechanisms.3 = EXTERNAL
+
+cluster_formation.peer_discovery_backend = classic_config
+@cluster_formation@
+
+cluster_partition_handling = pause_minority
+cluster_formation.target_cluster_size_hint = 3
+
+default_queue_type = quorum
+
+management.ssl.port    = 15671
+management.ssl.certfile = /etc/pki/tls/rabbitmq-node.crt
+management.ssl.keyfile = /etc/pki/tls/rabbitmq-node.key
+
+mqtt.max_session_expiry_interval_seconds = 1800

@@ -1,0 +1,67 @@
+replicaCount: 1
+
+secretsProject: hsbc-11941970-fdzhaseqa-dev
+fullnameOverride: "rabbitmqhase"
+loadBalancerIP: "192.168.193.13"
+
+image:
+  registry: asia-east2-docker.pkg.dev
+  repository: hsbc-11941970-fdzhaseqa-dev/ar-container-repo/rabbitmq
+  tag: 3.9.25-management
+  pullPolicy: IfNotPresent
+
+sm:
+  image:
+    repository: hsbc-11941970-fdzhaseqa-dev/ar-container-repo/secrets-manager
+    tag: 2.2.0
+
+secretsMap:
+  # KEY: VALUE - secret_id: version_id
+  RABBITMQHASE_PULSE_USERNAME: 1
+  RABBITMQHASE_PULSE_PASSWORD: 1
+  RABBITMQHASE_CM_USERNAME: 1
+  RABBITMQHASE_CM_PASSWORD: 1
+  RABBITMQHASE_ERLANG_COOKIE: 1
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations:
+    iam.gke.io/gcp-service-account: rbtmq-hase@hsbc-11941970-fdzhaseqa-dev.iam.gserviceaccount.com
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 8Gi
+  requests:
+    cpu: 500m
+    memory: 2Gi
+
+persistence:
+  size: 100Gi
+  storageClass: "standard-rwo-cmek"
+
+# Pod disruption budget
+podDisruptionBudget:
+  minAvailable: 1
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/instance
+              operator: In
+              values:
+                - rabbitmq
+        topologyKey: "kubernetes.io/hostname"
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - asia-east2-a
+                - asia-east2-b
+                - asia-east2-c

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "prometheus.fullname" . }}
+  labels:
+    {{- include "prometheus.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:registry
+      {{- include "prometheus.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "prometheus.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      labels:
+        {{- include "prometheus.labels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: prometheus
+          image: "{{ .Values.image. }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - "--storage.tsdb.retention.time={{ .Values.tsdbRetentionTime }}"
+            - "--log.level={{ .Values.loglevel }}"
+            - "--log.format=json"
+          ports:
+            - containerPort: {{ .Values.prometheusListeningPort }}
+              name: web
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus/
+            - name: prometheus-storage-volume
+              mountPath: /prometheus/
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- tpl . $ | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- tpl . $ | nindent 12 }}
+          {{- end }}
+  volumes:
+    - name: prometheus-config-volume
+      configMap:
+        defaultMode: 420
+        name: prometheus-server-conf
+  volumeClaimTemplates:
+    - metadata:
+        name: prometheus-storage-volume
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+        resources:
+          requests:
+            storage: 50Gi
+
+
+//StatefulSet 的 Pod 模板，定义 Prometheus 容器镜像、启动参数、挂载配置卷与数据持久卷，配置 Pod / 容器安全上下文、存活与就绪探针。

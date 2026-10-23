@@ -1,0 +1,312 @@
+properties {
+}
+
+def TEAMS_CHANNEL_EMAIL = ''
+def DELETE_THRESHOLD_DAYS = 2
+def NOTIFY_THRESHOLD_DAYS = 5
+def refreshWaitMinutes = 15
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+    }
+    stages {
+        stage('Environment Init') {
+            steps {
+                script {
+                    key = "terraform-deployer-${ENVIRONMENT_NAME.toLowerCase()}-${BUSINESS_REGION.toLowerCase()}"
+                    echo "Using key: ${key} to connect to GCP project: ${params.GCP_PROJECT}"
+
+                    withCredentials([file(credentialsId: key, variable: 'GCP_KEY')]) {
+                        sh(script: 'cat ${GCP_KEY} > ./target_key.json', returnStdout: false)
+                        sh(returnStdout: true, script: "gcloud config configurations create ${build_id}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/type http_no_tunnel")
+                        sh(returnStdout: true, script: "gcloud config set proxy/address googleapis-${params.PROXY}.gcp.cloud.hsbc")
+                        sh(returnStdout: true, script: "gcloud config set proxy/port 3128")
+                        sh(returnStdout: true, script: "gcloud auth activate-service-account --key-file=target_key.json")
+                        if (!params.GCP_PROJECT?.trim()) {
+                            error "GCP_PROJECT parameter is required"
+                        }
+                        sh(script: "gcloud config set project '${params.GCP_PROJECT}' --configuration='${build_id}'", returnStdout: false)
+                    }
+                }
+            }
+        }
+        stage('Delete images expired in cache') {
+            steps {
+                script {
+                    def gcpProject = params.GCP_PROJECT
+                    def dryrun = params.DRYRUN
+                    def expiryCachePath = 'gs://hsbc-11941970-feedzaiap-dev-gce-image-expiry-cache/imageVersionListAll.json'
+
+                    if (!gcpProject?.trim()) {
+                        error "GCP_PROJECT parameter is required"
+                    }
+
+                    echo "[INFO] ----------------------------------------------------"
+                    echo "[INFO] Image expiry cleanup started"
+                    echo "[INFO] Run mode      : ${dryrun ? 'DRYRUN (no deletion)' : 'DELETE'}"
+                    echo "[INFO] Source cache  : ${expiryCachePath}"
+                    echo "[INFO] Delete rule  : expire_in_days < ${DELETE_THRESHOLD_DAYS}"
+                    echo "[INFO] Notify rule  : expire_in_days < ${NOTIFY_THRESHOLD_DAYS}"
+                    echo "[INFO] ----------------------------------------------------"
+
+                    def cacheRaw = sh(        
+                        script: "gsutil cat '${expiryCachePath}'",
+                        returnStdout: true
+                    ).trim()
+
+                    if (!cacheRaw) {                        
+                        error "No JSON content returned from ${expiryCachePath}"
+                    }
+
+                    def parsedCache = new groovy.json.JsonSlurperClassic().parseText(cacheRaw)        //cacheRaw 中的 JSON 文本解析成 Groovy 数据结构
+                    def expiryEntries = []          //统一处理不同 JSON 返回结构
+
+                    if (parsedCache instanceof List) {
+                        expiryEntries.addAll(parsedCache)
+                    } else if (parsedCache instanceof Map) {
+                        if (parsedCache.images instanceof List) {
+                            expiryEntries.addAll(parsedCache.images)
+                        } else if (parsedCache.items instanceof List) {
+                            expiryEntries.addAll(parsedCache.items)
+                        } else {
+                            expiryEntries << parsedCache
+                        }
+                    } else {
+                        error "Unsupported JSON structure in ${expiryCachePath}: ${parsedCache?.getClass()?.name ?: 'unknown'}"
+                    }
+
+                    // Ignore production images from cache for this cleanup pipeline.
+                    def filteredEntries = expiryEntries.findAll { entry ->
+                        def imagePath = entry?.ImageName?.toString()?.trim()
+                        !imagePath?.toLowerCase()?.contains('prod')
+                    }                                                          //忽略prod镜像
+                    def skippedProdCount = expiryEntries.size() - filteredEntries.size()
+
+                    def parseExpireInDays = { expireInDaysValue ->
+                        def normalized = expireInDaysValue?.toString()?.trim()
+                        if (!normalized || !normalized.isInteger()) {
+                            return null
+                        }
+                        return normalized.toInteger()
+                    }
+
+                    def formatImageSummary = { entry ->
+                        def imagePath = entry?.ImageName?.toString()?.trim() ?: '<missing ImageName>'
+                        def entryProject = entry?.project_id?.toString()?.trim() ?: '<missing project_id>'
+                        def expireInDays = entry?.expire_in_days?.toString()?.trim() ?: '<missing>'
+                        return " - ${imagePath} | expire_in_days=${expireInDays}"
+                    }
+
+                    def deletedImages = []
+                    def wouldDeleteImages = []
+                    def keptImages = []
+                    def refreshedImages = []
+                    def refreshedImageLinks = []
+                    def invalidEntries = []
+                    def skippedOtherProjectCount = 0
+
+                    def projectEntries = filteredEntries.findAll { entry ->
+                        def entryProject = entry?.project_id?.toString()?.trim()
+                        entryProject == gcpProject                 // 保留gcpProject的image
+                    }
+                    def targetImages = projectEntries.findAll { entry ->
+                        def numericExpireInDays = parseExpireInDays(entry?.expire_in_days)
+                        numericExpireInDays != null && numericExpireInDays < DELETE_THRESHOLD_DAYS
+                    }
+                    def notificationImages = filteredEntries.findAll { entry ->
+                        def numericExpireInDays = parseExpireInDays(entry?.expire_in_days)
+                        numericExpireInDays != null && numericExpireInDays < NOTIFY_THRESHOLD_DAYS
+                    }
+
+                    def extractImageName = { imageName ->
+                        def normalized = imageName?.toString()?.trim()
+                        if (!normalized) {
+                            return null
+                        }
+                        return normalized.tokenize('/').last()
+                    }
+
+                    echo "[INFO] JSON entries found (raw):${expiryEntries.size()}"
+                    echo "[INFO] Entries after prod filter: ${filteredEntries.size()}"
+                    echo "[INFO] Entries skipped by prod filter: ${skippedProdCount}"
+                    echo "[INFO] Entries for project ${gcpProject}: ${projectEntries.size()}"
+                    echo "[INFO] Entries matching delete rule (expire_in_days < ${DELETE_THRESHOLD_DAYS}): ${targetImages.size()}"
+                    echo "[INFO] Entries matching notify rule (expire_in_days < ${NOTIFY_THRESHOLD_DAYS}): ${notificationImages.size()}"
+
+                    filteredEntries.each { entry ->
+                        def imagePath = entry?.ImageName?.toString()?.trim()
+                        def expireInDays = entry?.expire_in_days?.toString()?.trim()
+                        def entryProject = entry?.project_id?.toString()?.trim()
+                        def targetProject = entryProject ?: gcpProject
+                        def imageName = extractImageName(imagePath)
+
+                        if (targetProject != gcpProject) {
+                            skippedOtherProjectCount++
+                            return
+                        }
+
+                        if (!imagePath || !imageName) {
+                            invalidEntries << "- <invalid entry> | reason: missing ImageName"
+                            echo "[ERROR] Skipping invalid entry without ImageName: ${entry}"
+                            return
+                        }
+
+                        def numericExpireInDays = parseExpireInDays(expireInDays)
+
+                        if (numericExpireInDays == null || numericExpireInDays >= DELETE_THRESHOLD_DAYS) {
+                            keptImages << "- ${imagePath} (project: ${targetProject}) | expire_in_days=${expireInDays ?: '<missing>'}"
+                            echo "[KEEP] ${imagePath} | project=${targetProject} | expire_in_days=${expireInDays ?: '<missing>'}"
+                            return
+                        }
+
+                        if (dryrun) {
+                            wouldDeleteImages << "- ${imagePath} (project: ${targetProject}) | expire_in_days=${numericExpireInDays}"
+                            echo "[DRYRUN] ${imagePath} | project=${targetProject} | reason=expire_in_days(${numericExpireInDays}) < ${DELETE_THRESHOLD_DAYS}"
+                            return
+                        }
+
+                        def imageCheckStatus = sh(
+                            script: "gcloud compute images describe \"${imageName}\" --project=\"${targetProject}\" " +
+                                    "--format='value(name)' >/dev/null 2>&1",
+                            returnStatus: true
+                        )
+                        if (imageCheckStatus != 0) {
+                            echo "[SKIP] ${imagePath} | project=${targetProject} | image is missing or cannot be verified; refresh and deletion skipped"
+                            return
+                        }
+
+                        echo "[REFRESH] Triggering image refresh for ${imageName} in ${targetProject}"
+                        def refreshBuild = build job: '../image_refresh_entrypoint',
+                            wait: false,
+                            waitForStart: true,
+                            parameters: [
+                                string(name: 'projectId', value: targetProject),
+                                string(name: 'currentImage', value: imageName)
+                            ]
+
+                        def refreshBuildUrl = refreshBuild.absoluteUrl?.toString() ?: error(
+                                "Refresh build for ${imageName} started without a build URL"
+                        )
+                        def refreshedImageSummary = "- ${imagePath} (project: ${targetProject}) | " +
+                                "refresh job: ${refreshBuildUrl}"
+                        def refreshedBuildLink = "<li>${imagePath} (project: ${targetProject}): " +
+                                "<a href=\"${refreshBuildUrl}\">Refresh build #${refreshBuild.number}</a></li>"
+
+                        refreshedImages << refreshedImageSummary
+                        refreshedImageLinks << refreshedBuildLink
+                        echo "[REFRESH] Started: ${refreshBuildUrl}"
+
+                        echo "[REFRESH] Waiting ${refreshWaitMinutes} minutes before deleting ${imageName}"
+                        sleep time: refreshWaitMinutes, unit: 'MINUTES'
+
+                        echo "[DELETE] ${imagePath} | project=${targetProject} | reason=expire_in_days(${numericExpireInDays}) < ${DELETE_THRESHOLD_DAYS}"
+                        try {
+                            sh "gcloud compute images delete \"${imageName}\" --project=\"${targetProject}\" --quiet"
+                            deletedImages << "- ${imagePath} (project: ${targetProject}) | expire_in_days=${numericExpireInDays}"
+                            echo "[DELETED] ${imagePath} | project=${targetProject}"
+                        } catch (err) {
+                            invalidEntries << "- ${imagePath} (project: ${targetProject}) | reason: delete failed: ${err}"
+                            echo "[ERROR] Failed to delete ${imagePath}: ${err}"
+                        }
+                    }
+
+                    echo "[INFO] ----------------------------------------------------"
+                    echo "[INFO] Cleanup summary"
+                    echo "[INFO] Total entries (raw) : ${expiryEntries.size()}"
+                    echo "[INFO] Total entries (filtered) : ${filteredEntries.size()}"
+                    echo "[INFO] Skipped by prod filter : ${skippedProdCount}"
+                    echo "[INFO] Target project: ${gcpProject}"
+                    echo "[INFO] Project entries: ${projectEntries.size()}"
+                    echo "[INFO] Matched delete rule : ${targetImages.size()}"
+                    echo "[INFO] Matched notify rule  : ${notificationImages.size()}"
+                    echo "[INFO] Deleted count : ${deletedImages.size()}"
+                    echo "[INFO] Refreshed count : ${refreshedImages.size()}"
+                    echo "[INFO] Would delete count : ${wouldDeleteImages.size()}${dryrun ? ' (dry-run)' : ''}"
+                    echo "[INFO] Kept count    : ${keptImages.size()}"
+                    echo "[INFO] Skipped other project count : ${skippedOtherProjectCount}"
+                    echo "[INFO] Invalid count : ${invalidEntries.size()}"
+                    echo "[INFO] ----------------------------------------------------"
+
+                    // Persist cleanup result for subsequent notification stage.
+                    env.DELETED_IMAGES_COUNT = deletedImages.size().toString()
+                    env.NOTIFICATION_IMAGES_COUNT = notificationImages.size().toString()
+                    env.TARGET_IMAGES_TEXT = targetImages ?
+                            targetImages.collect(formatImageSummary).join('\n') :
+                            'None'
+                    env.NOTIFICATION_IMAGES_TEXT = notificationImages ?
+                            notificationImages.collect(formatImageSummary).join('\n') :
+                            'None'
+                    env.DELETED_IMAGES_TEXT = deletedImages ? deletedImages.join('\n') : 'None'
+                    env.WOULD_DELETE_IMAGES_TEXT = wouldDeleteImages ? wouldDeleteImages.join('\n') : 'None'
+                    env.KEPT_IMAGES_TEXT = keptImages ? keptImages.join('\n') : 'None'
+                    env.INVALID_ENTRIES_TEXT = invalidEntries ? invalidEntries.join('\n') : 'None'
+                    env.REFRESHED_IMAGE_LINKS_HTML = refreshedImageLinks ?
+                            refreshedImageLinks.join('\n') :
+                            '<li>None</li>'
+                }
+            }
+        }
+
+        stage('Notify on Expiring Images') {
+            when {
+                expression {
+                    (env.NOTIFICATION_IMAGES_COUNT ?: '0').toInteger() > 0 &&
+                            (params.GCP_PROJECT ?: '').trim() == 'hsbc-11941970-fdzhaseqa-dev' //avoid send duplicate notifications for other regions, TODO: include all market in 1 job and send only notification
+                }
+            }
+            steps {
+                script {
+                    def notificationCount = (env.NOTIFICATION_IMAGES_COUNT ?: '0').toInteger()
+                    def emailBody = """<html><body style='font-family:Arial,sans-serif;font-size:13px;'>
+                    <p><strong>Delete threshold:</strong> expire_in_days &lt; ${DELETE_THRESHOLD_DAYS}</p>
+                    <p><strong>Notify threshold:</strong> expire_in_days &lt; ${NOTIFY_THRESHOLD_DAYS}</p>
+                    <p><strong>Jenkins Build:</strong> <a href="${env.BUILD_URL}">${env.JOB_NAME} #${env.BUILD_NUMBER}</a></p>
+                    <h3>Image list: </h3>
+                    <pre style="background:#f7f7f7;border:1px solid #ddd;padding:8px;white-space:pre-wrap;">${env.NOTIFICATION_IMAGES_TEXT ?: 'None'}</pre>
+                    <h3>Triggered image refresh jobs:</h3>
+                    <ul>${env.REFRESHED_IMAGE_LINKS_HTML ?: '<li>None</li>'}</ul>
+                </body></html>"""
+
+                    emailext(
+                            subject: "Image Expiry Notification - Images Expiring Within ${NOTIFY_THRESHOLD_DAYS} Days",
+                            body: emailBody,
+                            to: TEAMS_CHANNEL_EMAIL,
+                            mimeType: 'text/html'
+                    )
+                    echo "Expiry notification sent to: ${TEAMS_CHANNEL_EMAIL}"
+
+                    // Mark build as UNSTABLE (not failed - so cron keeps running)
+                    currentBuild.result = 'UNSTABLE'
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                def emailBody = """<html><body style='font-family:Arial,sans-serif;'>
+                <h2 style="color:red;">⚠️ Image Expiry Cleanup Pipeline Error</h2>
+                <p>The auto deletion expired image pipeline itself failed to execute.</p>
+            </body></html>"""
+
+                emailext(
+                        subject: "⚠️ FDZ auto deletion expired image: PIPELINE ERROR ${params.BUSINESS_REGION}-${params.ENVIRONMENT_NAME}",
+                        body: emailBody,
+                        to: TEAMS_CHANNEL_EMAIL,
+                        mimeType: 'text/html'
+                )
+            }
+        }
+        success {
+            echo "Image expiry scan completed successfully."
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
+

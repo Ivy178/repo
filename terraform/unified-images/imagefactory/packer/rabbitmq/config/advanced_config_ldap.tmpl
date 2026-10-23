@@ -1,0 +1,42 @@
+erlang
+  
+%%====================================================================
+%% Advanced Erlang Networking/Clustering Options.
+%%
+%% See https://www.rabbitmq.com/clustering.html for details
+%% See https://www.rabbitmq.com/ldap.html
+%%====================================================================
+{rabbit, [{auth_backends, [rabbit_auth_backend_internal,rabbit_auth_backend_ldap]}]},
+{rabbitmq_auth_backend_ldap,
+    [
+        {servers,                  ["$LDAP_SERVER"]},
+        {dn_lookup_bind,           {"CN=$USER@,OU=Service Accounts,DC=InfoDir,DC-Prod,DC-HSBC", "$PASSWORD@"}},
+        {dn_lookup_base,           "DC-InfoDir,DC-PROD,DC-HSBC"},
+        {group_lookup_base,        "DC-InfoDir,DC-PROD,DC-HSBC"},
+        {dn_lookup_attribute,      "CN"},
+        {use_ssl,                  true},
+        {port,                     3269},
+        {vhost_access_query, {in_group_nested, "CN=gcp.$SECRET_PROJECT_NAME.airflow-admin-priv,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC", "member", subtree}},
+        {vhost_access_query, {in_group_nested, "CN=gcp.$SECRET_PROJECT_NAME.airflow-user,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC", "member", subtree}},
+        {resource_access_query,
+            {for, [{permission, configure, {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-admin-priv,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+                   {permission, write,    {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-user,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+                   {permission, read,     {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-viewer,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}}
+                  ]
+            }
+        },
+        {topic_access_query,
+            {for, [{permission, write, {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-admin-priv,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+                   {permission, write, {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-user,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+                   {permission, read,  {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-viewer,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}}
+                  ]
+            }
+        },
+        {tag_queries,
+            [{administrator, {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-admin-priv,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+             {management,    {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-user,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}},
+             {monitoring,    {in_group, "CN=gcp.$SECRET_PROJECT_NAME.airflow-viewer,OU=$SECRET_PROJECT_NAME,OU=GCP,OU=Applications,OU-Groups,DC=InfoDir,DC-Prod,DC-HSBC"}}
+            ]
+        }
+    ]
+}.

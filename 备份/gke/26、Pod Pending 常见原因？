@@ -1,0 +1,71 @@
+# 资源不足
+Pod 的 resources.requests 大于所有节点的可用资源，例如：
+resources:
+  requests:
+    cpu: "4"
+    memory: "16Gi"
+
+排查：
+kubectl get nodes
+kubectl describe node <node-name>
+kubectl top nodes
+
+处理方式：
+降低 Pod 的 resource requests
+扩容节点池
+使用更大规格的节点
+检查 Cluster Autoscaler 是否正常工作
+
+
+# nodeSelector 或 Affinity 不匹配
+Pod 要求调度到带有特定标签的节点，但集群中没有符合条件的节点：
+nodeSelector:
+  workload: gpu
+
+kubectl get nodes --show-labels      //检查节点标签：
+
+
+
+# Taint 和 Toleration 不匹配
+节点设置了 Taint，Pod 没有对应的 Toleration，因此不能调度到该节点。
+例如节点有：
+workload=gpu:NoSchedule  
+
+Pod 需要配置对应的：
+tolerations:
+- key: workload
+  operator: Equal
+  value: gpu
+  effect: NoSchedule
+
+
+# PVC 未绑定
+Pod 依赖的 PVC 还没有绑定到 PV，常见于：
+PVC 请求的容量没有可用 PV
+StorageClass 不存在
+动态供给失败
+GCE Persistent Disk 配置错误
+可用区或访问模式不匹配
+
+kubectl get pvc -n <namespace>
+kubectl describe pvc <pvc-name> -n <namespace>
+kubectl get pv
+kubectl get storageclass
+
+
+# ResourceQuota 或 LimitRange 限制
+Namespace 可能设置了资源配额，Pod 请求的 CPU、内存或对象数量超过限制。
+kubectl get resourcequota -n <namespace>
+kubectl describe resourcequota -n <namespace>
+kubectl get limitrange -n <namespace>
+
+
+# 节点或集群本身不可用
+没有 Ready 节点
+节点池达到最大节点数
+Cluster Autoscaler 无法扩容
+节点维护或升级中
+Pod 使用了不支持的架构或运行约束
+
+
+

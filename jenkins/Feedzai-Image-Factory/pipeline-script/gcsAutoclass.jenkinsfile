@@ -1,0 +1,119 @@
+ 
+properties([
+    buildDiscarder(logRotator(numToKeepStr:'20')),
+    pipelineTriggers([
+        parameterizedCron('''
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=AP1;GCP_PROJECT=hsbc-12733076-feedzalstqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=DEV;BUSINESS_REGION=AP;GCP_PROJECT=hsbc-11941970-feedzaliapqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=AP;GCP_PROJECT=hsbc-11941970-feedzaliapqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=INDIA;GCP_PROJECT=hsbc-12692643-fdzindiaqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=HSBCNET;GCP_PROJECT=hsbc-12684830-fsbcnetqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=EMEA;GCP_PROJECT=hsbc-12684817-fdzemeaqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=UK;GCP_PROJECT=hsbc-11616597-feedzaleuqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=DEV;BUSINESS_REGION=UK;GCP_PROJECT=hsbc-11616597-feedzaleuqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=BASE;GCP_PROJECT=hsbc-11941970-fdzbaseqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=APMST;GCP_PROJECT=hsbc-11412834-fdzrma-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=US;GCP_PROJECT=hsbc-20118033-feedzalusqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=MX;GCP_PROJECT=hsbc-20118034-feedzalmxaqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=MX;GCP_PROJECT=hsbc-20118034-feedzalmqa-dev;
+            0 21 * * * ENVIRONMENT_NAME=DEV;BUSINESS_REGION=INDIA-RMA;GCP_PROJECT=hsbc-20118000-feedzalrma-dev;
+            0 21 * * * ENVIRONMENT_NAME=QA;BUSINESS_REGION=INDIA-RMA;GCP_PROJECT=hsbc-20118000-fdzrmaqa-dev;
+            ''')
+    ]),
+])
+parameters([
+    choice(name: "ENVIRONMENT_NAME", choices: ["DEV", "QA"], description: ""),
+    choice(name: "BUSINESS_REGION", choices: ["AP", "UK", "BASE", "APMST", "INDIA", "EMEA", "HSBCNET", "APM", "US", "MX", "INDIA-RMA"], description: "Business region given configuration work for"),
+    choice(name: "GCP_PROJECT", choices:["hsbc-12733076-feedzalstqa-dev",
+        "hsbc-11941970-feedzaliapqa-dev","hsbc-11941970-feedzaliapqa-dev",
+        "hsbc-12692643-fdzindiaqa-dev","hsbc-12684830-fsbcnetqa-dev",
+        "hsbc-12684817-fdzemeaqa-dev","hsbc-11616597-feedzaleuqa-dev",
+        "hsbc-11616597-feedzaleuqa-dev","hsbc-11941970-fdzbaseqa-dev",
+        "hsbc-11412834-fdzrma-dev","hsbc-20118033-feedzalusqa-dev",
+        "hsbc-20118034-feedzalmxaqa-dev","hsbc-20118000-feedzalrma-dev",
+        "hsbc-20118000-fdzrmaqa-dev"], description: 'GCP projects you want to run'),
+])
+
+pipeline {
+    agent {
+        node { label 'cm-linux' }
+    }
+    environment {
+        GOOGLE_APPLICATION_CREDENTIALS = "$env.WORKSPACE/target_key.json"
+        NO_PROXY                       = '127.0.0.1,localhost,hsbc'
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps {
+                script {
+                    // via terraform key to connect with gcp project
+                    key = "terraform-deployer-${ENVIRONMENT_NAME.toLowerCase()}-${BUSINESS_REGION.toLowerCase()}"
+                    echo "Using key: ${key} to connect to GCP project: ${params.GCP_PROJECT}"
+
+                    withCredentials([file(credentialsId: key, variable: 'GCP_KEY')]){
+                        sh(script: 'cat ${GCP_KEY} > ./target_key.json', returnStdout: false)
+                        sh(returnStdout: true, script: "gcloud config configurations create gcs-autoclass-${build_id}")
+                        sh(returnStdout: true, script: "gcloud config set proxy/type http_no_tunnel")
+                        sh(returnStdout: true, script: "gcloud config set proxy/address googleapis-dev.gcp.cloud.hk.hsbc") // as it only run in qa and dev
+                        sh(returnStdout: true, script: "gcloud config set proxy/port 3128")
+                        sh(returnStdout: true, script: "gcloud auth activate-service-account --key-file=target_key.json")
+                        if (!params.GCP_PROJECT?.trim()) {
+                            error "GCP_PROJECT parameter is required"
+                        }
+                        sh(script: "gcloud config set project '${params.GCP_PROJECT}' --configuration='gcs-autoclass-${build_id}'", returnStdout: false)
+                    }
+
+                    wrap([$class: 'BuildUser']) {
+                        def builder = env.BUILD_USER ?: env.BUILD_USER_ID ?: 'CICD Build'
+                        addBadge(text: "Build by - ${builder}", cssClass: 'badge-text--background jenkins-l-color-purple')
+                        addBadge(text: "Env - ${params.ENVIRONMENT_NAME}", cssClass: 'badge-text--background jenkins-l-color-teal')
+                        addBadge(text: "Region - ${params.BUSINESS_REGION}", cssClass: 'badge-text--background jenkins-l-color-indigo')
+                        addBadge(text: "Project - ${params.GCP_PROJECT}", cssClass: 'badge-text--background jenkins-l-color-orange')
+                    }
+                }
+            }
+        }
+
+        stage('scan and add auto-class') {
+            steps {
+                script {
+                    // Use the configured GCP project parameter
+                    def projectId = params.GCP_PROJECT
+                    sh 'rm -f modified_bucket.txt && touch modified_bucket.txt'
+
+                    def gcsList = sh(
+                        script: "gcloud storage buckets list --project=${projectId} --format='csv[no-heading](name,autoclass.enabled,lifecycle_config.rule.action)'",
+                        returnStdout: true
+                    ).trim().readLines()
+
+                    if (gcsList.isEmpty()){
+                        echo "No GCS buckets found in project: ${projectId}"
+                        return
+                    }
+                    gcsList.each { line ->
+                        def parts=line.tokenize(',')
+                        def (bucketName, autoclassEnabled, lifecycleRule) = parts
+
+                        if (lifecycleRule in [null, ''] && autoclassEnabled != 'True') {
+                            sh "gcloud storage buckets update gs://${bucketName} --default-storage-class=STANDARD"
+                            sh "gcloud storage buckets update gs://${bucketName} --enable-autoclass"
+                            sh "echo '${bucketName}' >> modified_bucket.txt"
+                        } else {
+                            echo "\n Bucket ${bucketName} already has a lifecycle rule, skipping"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            // Archive the modified bucket List
+            archiveArtifacts artifacts: 'modified_bucket.txt', allowEmptyArchive: true
+        }
+        failure {
+            echo "Cleanup failed for project ${params.GCP_PROJECT}"
+        }
+    }
+}

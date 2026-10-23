@@ -1,0 +1,15 @@
+[Unit]
+Description=Google Cloud Storage FUSE mounter
+After=network-online.target NetworkManager.service env-configure.service local-fs.target sys-fs-fuse-connections.mount
+Before=shutdown.target
+ 
+[Service]
+Type=forking
+User=root
+Group=root
+ExecStartPre=chmod +x /usr/local/sbin/gcs_fuse.sh
+ExecStart=/bin/bash /usr/local/sbin/gcs_fuse.sh
+Restart=always
+ 
+[Install]
+WantedBy=multi-user.target

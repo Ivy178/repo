@@ -1,0 +1,199 @@
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: "rabbitmq"
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 999
+
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 999
+
+container:
+  ports:
+    amqp: 5672
+    # amqpTls: 5671 # unsupported
+    dist: 25672
+    epmd: 4369
+    manager: 15672
+    metrics: 9419
+
+service:
+  ports:
+    amqp: 5672
+    # amqpTls: 5671 # unsupported
+    dist: 25672
+    epmd: 4369
+    manager: 15672
+    metrics: 9419
+
+metrics:
+  enabled: true
+
+nodeSelector: {}
+
+tolerations: []
+
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 120
+
+readinessProbe:
+  initialDelaySeconds: 120
+  periodSeconds: 240
+  failureThreshold: 6
+  timeoutSeconds: 40
+
+configuration: |-
+  ###########################################################################
+  # Clustering
+  ###########################################################################
+  cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+  cluster_formation.k8s.host = kubernetes.default
+  cluster_formation.node_cleanup.interval = 10
+  # cluster_formation.node_cleanup.only_log_cleanup = true
+  cluster_formation.node_cleanup.only_log_warning = false
+  cluster_partition_handling = autoheal
+  ###########################################################################
+  # Logging
+  ###########################################################################
+
+  log.console = true
+  log.console.level = info
+  log.console.formatter = json
+  # acceptable values are: rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default
+  log.console.formatter.time_format = rfc3339_T
+  # to details see: https://www.erlang.org/docs/apps/kernel/logger_chapter.html#type-template
+  log.console.formatter.json.field_map = time level:severity msg:message
+
+  log.file = false
+
+  ###########################################################################
+  # Queue master locator
+  ###########################################################################
+
+  queue_master_locator = min-masters
+
+  ###########################################################################
+  # Guest user
+  ###########################################################################
+
+  loopback_users.guest = false
+
+  {{- if .Values.metrics.enabled }}
+  ###########################################################################
+  # Prometheus metrics
+  ###########################################################################
+
+  prometheus.return_per_object_metrics = false
+  prometheus.path = /metrics
+  prometheus.tcp.port = 9419
+  {{- end }}
+
+configurationInitial:
+  vhosts:
+    - pulseblue
+    - pulsegreen
+    - pulsefss
+    - pulse
+    - feedback-storage
+    - cm
+  users:
+    - username: pulse
+      tags:
+        - management
+        - administrator
+      permissions:
+        - vhost: pulse
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+        - vhost: pulseblue
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+        - vhost: pulsegreen
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+        - vhost: pulsefss
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+        - vhost: cm
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+        - vhost: feedback-storage
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+    - username: cm
+      tags:
+        - management
+      permissions:
+        - vhost: cm
+          configure: ".*"
+          write: ".*"
+          read: ".*"
+  policies:
+    - vhost: "pulseblue"
+      name: "replicate-queues"
+      pattern: "^(fdz-sq-|federation)"
+      tags:
+        ha-mode: "all"
+        expires: 86400000
+        ha-sync-batch-size: 1000
+        ha-promote-on-shutdown: "always"
+      apply_to: "queues"
+    - vhost: "pulsegreen"
+      name: "replicate-queues"
+      pattern: "^(fdz-sq-|federation)"
+      tags:
+        ha-mode: "all"
+        expires: 86400000
+        ha-sync-batch-size: 1000
+        ha-promote-on-shutdown: "always"
+      apply_to: "queues"
+    - vhost: "feedback-storage"
+      name: "replicate-queues"
+      pattern: "^(fdz-sq-)"
+      tags:
+        ha-mode: "all"
+        expires: 28800000
+      apply_to: "queues"
+    - vhost: "cm"
+      name: "replicate-queues"
+      pattern: ".*"
+      tags:
+        ha-mode: "all"
+      apply_to: "queues"
+
+sm:
+  image:
+    registry: asia-east2-docker.pkg.dev
+    repository: hsbc-11941970-feedzaiapst-dev/ar-container-repo/secrets-manager
+    tag: 1.0.4
+    pullPolicy: IfNotPresent
+  securityContext:
+    allowPrivilegeEscalation: false
+    runAsUser: 999
+    runAsGroup: 999
+    runAsNonRoot: true
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+plugins:
+  - rabbitmq_management
+  - rabbitmq_federation
+  - rabbitmq_federation_management
+  - rabbitmq_prometheus
+forceBoot: true

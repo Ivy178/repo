@@ -1,0 +1,18 @@
+[Unit]
+Description=Airflow API server daemon
+After=network.target cloud-sql-proxy.service airflow-db-upgrade.service
+Requires=cloud-sql-proxy.service airflow-db-upgrade.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Group=root
+Type=simple
+ExecStart=/bin/bash -ce "/usr/local/bin/airflow api-server 2>&1 >> /var/log/webserver.log"
+Restart=on-failure
+RestartSec=5s
+PrivateTmp=true
+ 
+[Install]
+WantedBy=multi-user.target

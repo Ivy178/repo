@@ -1,0 +1,6 @@
+apiVersion: v2
+name: prometheus
+description: prometheus chart for cluster
+type: application
+version: 0.1.0
+appVersion: "2.37.0"

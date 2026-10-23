@@ -1,0 +1,20 @@
+[Unit]
+Description=Airflow db upgrade daemon
+After=network-online.target NetworkManager.service env-configure.service cloud-sql-proxy.service
+Requires=cloud-sql-proxy.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Type=oneshot
+ExecStart=/bin/bash -ce "/usr/local/bin/airflow db migrate"
+ExecStart=/bin/bash -ce "/usr/local/bin/airflow connections create-default-connections"
+ExecStartPre=/usr/bin/chmod +x /usr/local/sbin/airflow_seed_variables.sh
+ExecStart=/bin/bash /usr/local/sbin/airflow_seed_variables.sh
+RemainAfterExit=true
+StandardOutput=syslog
+StandardError=syslog
+ 
+[Install]
+WantedBy=multi-user.target

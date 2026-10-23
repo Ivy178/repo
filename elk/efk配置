@@ -1,0 +1,46 @@
+Fluentd 配置核心就三块：source 从哪采，filter 怎么加工，match 往哪送，中间靠 tag 串联路由。
+
+1. source：定义采集源
+最常用的是 tail，实时追文件。关键配 path 日志路径、pos_file 记录位点（重启不丢）、tag 给数据打标签，后面 filter 和 match 靠这个标签匹配。
+
+2. filter：加工数据
+比如加主机名、环境、删敏感字段，用 record_transformer 或 grep。不是必须，但生产常用。
+
+3. match：定义输出
+发到 ES、Kafka、S3 都行。生产环境一定要用文件缓冲，别用默认内存缓冲，不然 Fluentd 重启或 ES 抖一下数据就丢了。配 @type file、flush_interval、retry_forever，保证可靠。
+
+
+一个最简单的例子：
+```xml
+<source>
+  @type tail
+  path /var/log/nginx/access.log
+  pos_file /var/log/fluentd/nginx.pos
+  tag access.nginx
+  <parse>
+    @type nginx
+  </parse>
+</source>
+
+<filter access.nginx>
+  @type record_transformer
+  <record>
+    hostname "#{Socket.gethostname}"
+  </record>
+</filter>
+
+<match access.**>
+  @type elasticsearch
+  host localhost
+  port 9200
+  logstash_format true
+  <buffer>
+    @type file
+    path /var/log/fluentd/buffer
+    flush_interval 5s
+    retry_forever true
+  </buffer>
+</match>
+```
+
+面试就说： Fluentd 配置就三段：source 采集、filter 加工、match 输出，靠 tag 路由。生产重点两条：pos_file 保位点，文件缓冲保可靠。改 @type 就能换插件，很灵活。

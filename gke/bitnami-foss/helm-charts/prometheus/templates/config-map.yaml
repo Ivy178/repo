@@ -1,0 +1,177 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-server-conf
+  labels:
+    name: prometheus-server-conf
+data:
+  prometheus.yml: |-
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    alerting:
+      alertmanagers:
+        - scheme: http
+          static_configs:
+            - targets:
+
+    scrape_configs:
+      - job_name: "rabbitmq"
+        # metrics_path defaults to '/metrics'
+        # scheme defaults to 'http'
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqAddress }}"]
+      - job_name: 'feedzai-metrics'
+        static_configs:
+          - targets: ['{{ .Values.feedzaiMetricsAddress }}']
+        metric_relabel_configs:
+          - regex: 'host'
+            action: labeldrop
+      - job_name: 'zookeeper'
+        static_configs:
+          - targets: ['{{ .Values.zookeeperAddress }}']
+      - job_name: 'cassandra'
+        static_configs:
+          - targets: ['{{ .Values.cassandraAddress }}']
+      - job_name: 'cassandra4'
+        static_configs:
+          - targets: ['{{ .Values.cassandra4Address }}']
+      - job_name: "rabbitmqds"
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqdsAddress }}"]
+      - job_name: 'casemanagerLB'
+        static_configs:
+          - targets: ['{{ .Values.cmMetricsAddress }}']
+      - job_name: "rabbitmqPod0"
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod0 }}"]
+      - job_name: "rabbitmqPod1"
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod1 }}"]
+      - job_name: "rabbitmqPod2"
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod2 }}"]
+      - job_name: "rabbitmq-pod0"
+        metrics_path: /metrics/per-object
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod0 }}"]
+      - job_name: "rabbitmq-pod1"
+        metrics_path: /metrics/per-object
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod1 }}"]
+      - job_name: "rabbitmq-pod2"
+        metrics_path: /metrics/per-object
+        static_configs:
+          - targets: ["{{ .Values.rabbitmqPod2 }}"]
+      - job_name: "etlMetricsAddress"
+        static_configs:
+          - targets: ["{{ .Values.etlMetricsAddress }}"]
+      - job_name: 'casemanagerNode0'
+        static_configs:
+          - targets: ['{{ .Values.cmMetricsAddress0 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'casemanagerNode1'
+        static_configs:
+          - targets: ['{{ .Values.cmMetricsAddress1 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'casemanagerNode2'
+        static_configs:
+          - targets: ['{{ .Values.cmMetricsAddress2 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+
+      - job_name: 'pulseblue0'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress0 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseblue1'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress1 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseblue2'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress2 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseLB'
+        static_configs:
+          - targets: ['{{ .Values.pulseLBMetricsAddress }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulsegreen0'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress3 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulsegreen1'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress4 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulsegreen2'
+        static_configs:
+          - targets: ['{{ .Values.pulseMetricsAddress5 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbblue0'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbblueaddress0 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbblue1'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbblueaddress1 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbblue2'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbblueaddress2 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbgreen0'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbgreenaddress0 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbgreen1'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbgreenaddress1 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseinbgreen2'
+        static_configs:
+          - targets: ['{{ .Values.pulseinbgreenaddress2 }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'pulseNewLB'
+        static_configs:
+          - targets: ['{{ .Values.pulsenewlb }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop
+      - job_name: 'etlInbLB'
+        static_configs:
+          - targets: ['{{ .Values.etlInbLB }}']
+        metric_relabel_configs:
+          - regex: 'url'
+            action: labeldrop

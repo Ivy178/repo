@@ -1,0 +1,200 @@
+eim: "${params.eim}"
+appname: "terraform-hdpv2-g3"
+application_version: "${params.application_version}"
+
+log_trace:
+  enabled: true
+
+parameters:
+  - name: eim
+    type: choice
+    choices:
+      - 11505776
+    description: "EIM ID for the DDS project"
+  - name: non_prod_target_env
+    type: choice
+    choices:
+      - DEV
+      - SIT
+      - UAT
+    description: "Select the DEV GCP environment"
+  - name: prod_target_env
+    type: choice
+    choices:
+      - PRE-PROD
+      - PROD
+    description: "Select the GCP environment"
+  - name: application_version
+    type: string
+    default: "1.6.1"
+    description: "Application version for artifact naming"
+  - name: non_prod_project_id
+    type: choice
+    choices:
+      - hsbc-11505776-ddshk-dev
+      - hsbc-11505776-ddsaspuat-dev
+    description: "Non-prod project name"
+  - name: prod_project_id
+    type: choice
+    choices:
+      - hsbc-11505776-ddsaspprep-prod
+      - hsbc-11505776-ddsasp-prod
+    description: "Prod project name"
+  - name: artifact_version
+    type: string
+    default: "200.0.2"
+    description: "Artifact version for G3 deployment"
+  - name: environment_name
+    type: choice
+    description: dev
+    choices:
+      - dev
+      - prod
+
+  - name: project_region
+    type: choice
+    description: Format should be --region-europe-west2 OR asia-east2
+    choices:
+      - "asia-east2"
+  - name: tg_action
+    type: choice
+    description: Select Terraform action
+    choices:
+      - "plan"
+      - "apply"
+      - "destroy"
+  - name: project_area
+    type: choice
+    choices:
+      - Decisioning_Data_Store_ASP
+
+ice:
+  jenkins_credential_id: santanu-g3-pipeline-credentials
+
+jira: # this section enable functionality to update JIRA issue with build url and git commit url. JIRA issue ID is extracted from git commit message or branch name.
+  enabled: false # optional: Enable this to post build url and git commit url to comment section of JIRA issue
+  #jenkins_credential_id: YOUR_JIRA_CREDS # required: When enable is true. Credentials ID which is set up in Jenkins. These creds must have necessary permission to update JIRA issue via API. This will be your username/api-token generated in jira. ( Use of SA is recommended).
+  #host: "https://olm-jira.systems.uk.hsbc/jira" # optional: JIRA api host url which will be used to update the JIRA issue via API, default as ALM jira: https://alm-jira.systems.uk.hsbc/jira
+
+build:
+  terraform:
+    environment: "${params.target_env}"
+    working_dir: "migs/mig-airflow3"
+    artifact_path: "com/hsbc/wpb/dds/infra"
+    artifact_name: "INFRA-${params.application_version}.zip"
+    cloud_provider: "google" # optional default value is google, will support other provider if required later
+    nexus_instance_id: nexus302 # optional default value is nexus302
+    repository: raw-alm-dev-n3p # optional default value is raw-alm-dev-n3p
+    credential_bindings:
+      google_jenkins_credentials_file_id: "terraform-sa-${params.non_prod_project_id}"
+      nexus_jenkins_credentials_id: "JENNEXUS"
+
+controls: #qa/scanners
+  enabled: true
+  ice_component_name: "DDS infra"
+  sonarqube: #required:sonarqube step
+    enabled: false # Should always be enabled. (but not all language supported)
+    project_key: dragan-test-1 # required: sonor project key
+    jenkins_credential_id: "JENNEXUS" # required: Jenkins credentials ID for SonarQube (Secret text)
+    java_binaries: subdirectory/target/classes # optional: Sometimes target/classes will not be created at the root of workspace. default is 'target/classes'
+    filesize_limit: 500 # optional: set filesize limit (in MB) for files to be analyzed by SonarQube. default is 500.
+    tests: "src/test/java" # optional: Sets the Path for test source directory. Default : If not specified Sonarqube does not treat any file as test file.
+    sources: "src/main/java" # optional: Sets the path for source directory.Default :- if not specified , all files in working directory and subdirectories will be scanned.
+    coverage: true # optional: If set to true, the coverage report will be passed in the scan parameters. For Python container builds, it is up to the development team to provide the coverage.xml file.
+  sonatype_iq: #required: nexus step
+    enabled: true # Should always be enabled (but not all Language supported)
+    jenkins_credential_id: "JENNEXUS" # required: Jenkins credentials ID for Sonatype IQ (Username with password)
+    organization_name: "WPB Media and Content" # required: organisation name
+    application_categories: # required: application_categories
+      - "Service Tier 1"
+      - "Used within Dev or Test on an HSBC server"
+    iq_application_name: "com.hsbc.wpb.dds.infra" # optional: specify the application_name to override appname when creating sonatype_iq application. It will be composed by concatenating eim id and application name with underscore. If not specified, appname will be used
+    stage: "build" # optional: Can be build or release. default is 'build'. build will report findings, but not break the pipeline. release will break if there are findings.
+    scan_target: "*.*" # optional: scan target default is 'target/'
+    #force_scan: false # If true, scan is skipped if already performed within last 24 hours (smart scanning)
+  cyberflows:
+    jenkins_credential_id: "JENNEXUS" # required: Jenkins credentials ID for Cyberflows (Username with password)
+    timeout: 120 # timeout (int): The timeout value in seconds
+    sast:
+      enabled: true
+      configuration_id: QXFLitR2OVVD6GmSpIMUSL40 # optional: Configuration ID of the SAST scan created from cyberflows UI.
+      # If configuration_id can not be found, app_type will be used when creating one.
+      app_type: Cloud # optional: Can be Other, Web, Mobile, Desktop, API, Cloud, Embedded, IoT, Network, SCADA, ICS, OT, IOT, Mobile, Web, Desktop, API, Cloud, Embedded, IoT, Network, SCADA. Defaults to "Other".
+    dast:
+      enabled: false
+      configuration_id: A4yI9EWhVOHyZh2WfBGmzLWAM # required: Configuration ID of the DAST scan created from cyberflows UI.
+    cont:
+      enabled: false
+      configuration_id: A4yI9EWhVOHyZh2WfBGmzLWAM # optional: Configuration ID of the CONT scan created from cyberflows UI. if not specified, will trigger scan by EIM ID.
+
+deploy: # optional: deployments
+  enabled: true # optional: overall control for deployment stage. default is false.
+
+g3: # optional: Include this config block if you perform deployments via g3
+  enabled: true # optional: whether enable g3 deployment. default is false.
+  project_area: "${params.project_area}" # required: provide your G3 project name
+  application_name: "DDS-ASP-NEW" # required: provide your G3 application name
+  jenkins_credential_id: "YOUR_G3_NONPROD_CREDSxxxx" # optional: provide credentials to deploy automatically to non-prod environments. If not provided prompt will request credentials. (Username with password)// Your G3 credentials.
+  # pwi: optional: use this option, only if you required to deploy artifacts directly from maven pom or nexus or github to G3
+  #   package_from_pom: # optional: use this option to deploy artifacts from maven builds
+  #     pom_path: "directory/pom.xml" # required: this value should be matched with one of the componant built using maven steps, if not match G3 package creation will not happen/fail.
+  #     pwi_artifact_name: "hdpv2-test-pwi-01" # optional: This is used for multi-module Maven projects. You can specify the artefact name of the target module to deploy when multiple modules are built through a single POM file. If not specified, all modules will be considered to be deployed.
+  package_from_nexus: # optional: use this option to deploy artifacts from nexus
+    # summary: "g3 poc with standard pipeline" # required: only required if you required to deploy artifacts from nexus, provide summary for your package work item
+    pwi_artifact_name: "terraform" # required: provide artifact name for your package work item
+    pwi_artifact_version: "${params.artifact_version}" # required: provide artifact version for your package work item
+    nexus_artifact_path: "https://nexus302.systems.uk.hsbc:8081/nexus/repository/raw-alm-dev_n3p/com/hsbc/wpb/dds/infra/INFRA-${params.application_version}.zip"
+  # package_from_github: # optional: use this option to deploy artifacts from github
+  #   summary: "g3 poc with standard pipeline" # required: only required if you required to deploy artifacts from github. This example is showing creation of g3 PWI from github options.
+  #   pwi_artifact_name: "infra_terraform_poc" # required: provide artifact name for your package work item
+  #   pwi_artifact_version: "${params.artifact_version}" # required: provide artifact version for your package work item
+  #   pwi_git_repo_url: "https://alm-github.systems.uk.hsbc/WPB-AI-Tooling/poc.git" # required: Github repository url where deployment manifests files exists (for IRF/GKE deployment)
+  #   pwi_git_branch_name: "main" # required: name of the branch of the above repository which will get referred by G3 while creating PWI.
+  # package_from_json:
+  #   package_json_path: "package.json" # required: path to the package.json file.
+  # package_from_zip: # use this option to specify artifacts built as zip files for deployment.
+  #   artifact_name: "my-app1" # required: name of the first artifact to be deployed.
+  #   artifact_name: "my-app2" # required: name of the second artifact to be deployed.
+
+  rwi: # required: use this option to define your release work item and deployments
+    release_info: # required: provide details to create release work item
+      summary: "g3 deployment with standard pipeline" # required: provide summary for your release work item
+      # required: HDPv2 expects end user to have their release configuration item already created with correct detail
+      # provide ID of your release configuration item
+      # For maven builds, your RWI should contain artifact name from pom.xml, else it will fail at the time of RWI create
+      release_config_id: 7540416 #PROD - 7507881 PRE-PROD 7540416
+      allow_continuous_deployment: "yes" # required: enable / disable allowContinuousDeployment
+    deployments: # optional: deploy release work item to non-prod target environments
+      # deployment happens as per the sequence of target envs defined in config as follow
+      non_prod: # optional: required to configure only if non prod deployment to be happened
+        - summary: "g3 deployment with standard pipeline"
+          target_environment: "${params.non_prod_target_env}" # required: environment name, should match the environment name configured in G3
+          promoted_by: "45172979" #45386478 # required: this PSID is just for payload purpose, it doesn't need to be same as credId
+          release_now: "yes" #yes
+          release_args:
+            eim: "${params.eim}"
+            project_id: "${params.non_prod_project_id}" # required: GCP project id to deploy to, this will be used by G3 to deploy the artifacts
+            project_region: "${params.project_region}" # required: GCP project region to deploy to, this will be used by G3 to deploy the artifacts
+            environment_name: "${params.non_prod_target_env}"
+            tg_action: "${params.tg_action}"
+        # - summary: "hdpv2-test-rwi-uat" # required: provide summary for deployment
+        #   target_environment: "UAT" # required: provide target environment, it must match with your g3 application
+        #   promoted_by: "45120358" # required: provide PSID for promotion / deployment
+        #   release_now: "yes" # required: so start the deployment immediately without specifying any schedule
+        # - summary: "hdpv2-test-rwi-preprod"
+        #   target_environment: "PRE-PROD" # required: environment name, should match the environment configured in G3
+        #   promoted_by: "45120358"
+        #   release_now: "yes"
+    production: # optional: required to configured only if production deployment to be happened
+      target_environment: "${params.prod_target_env}" # required: environment name, should match the environment name configured in G3
+      reference_cr: "CHG6053173" # required (either reference_cr or drafted_cr): reference cr no. which will get cloned by G3 and create new cr from it.
+      #drafted_cr: "CHG65481727" # required: use either of reference_cr or drafted_cr): drafted cr no. which will be used by G3 to schedule RWI.
+      planned_start_date_time_utc: "2026-08-06 02:00:00" # required: Only required for Reference CR, planned CR start datetime, should be in UTC
+      planned_end_date_time_utc: "2026-08-06 12:00:00" # required: Required for Draft and Reference CR, planned CR end datetime, should be in UTC
+      auto_release_time_utc: "2026-08-06 02:05:00" # required: Required for Draft and Reference CR, auto release datetime, should be in UTC
+      release_args:
+        eim: "${params.eim}"
+        project_id: "${params.prod_project_id}" # required: GCP project id to deploy to, this will be used by G3 to deploy the artifacts
+        project_region: "${params.project_region}" # required: GCP project region to deploy to, this will be used by G3 to deploy the artifacts
+        environment_name: "${params.prod_target_env}"
+        tg_action: "${params.tg_action}"

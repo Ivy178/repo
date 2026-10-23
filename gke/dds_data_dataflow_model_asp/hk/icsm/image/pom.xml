@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one or more
+ contributor license agreements.  See the NOTICE file distributed with
+ this work for additional information regarding copyright ownership.
+ The ASF licenses this file to You under the Apache License, Version 2.0
+ (the "License"); you may not use this file except in compliance with
+ the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.hsbc.wpb.ds.asb</groupId>
+    <artifactId>icsm-albrs-h2o</artifactId>
+    <version>1.0.0-beta2</version>
+    <packaging>pom</packaging>
+    <properties>
+        <beam.version>2.65.0</beam.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven-compiler-plugin.version>3.7.0</maven-compiler-plugin.version>
+        <maven-exec-plugin.version>1.6.0</maven-exec-plugin.version>
+        <slf4j.version>2.0.16</slf4j.version>
+        <h2o.version>3.46.0.9</h2o.version>
+    </properties>
+    <profiles>
+        <profile>
+            <id>direct-runner</id>
+            <!-- Makes the DirectRunner available when running a pipeline. -->
+            <dependencies>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-genmodel</artifactId>
+                    <version>${h2o.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>commons-lang</groupId>
+                            <artifactId>commons-lang</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>joda-time</groupId>
+                            <artifactId>joda-time</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>net.sf.opencsv</groupId>
+                            <artifactId>opencsv</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-genmodel-ext-xgboost</artifactId>
+                    <version>${h2o.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>commons-logger</groupId>
+                            <artifactId>commons-logger</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>commons-logging</groupId>
+                            <artifactId>commons-logging</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-logger</artifactId>
+                    <version>${h2o.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>xgboost-predictor</artifactId>
+                    <version>0.3.20</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>net.jafama</groupId>
+                            <artifactId>jafama</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-tree-api</artifactId>
+                    <version>0.3.20</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                    <version>2.10.1</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>dataflow-runner</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <!-- Makes the DataflowRunner available when running a pipeline. -->
+            <dependencies>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-genmodel</artifactId>
+                    <version>${h2o.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>commons-lang</groupId>
+                            <artifactId>commons-lang</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>joda-time</groupId>
+                            <artifactId>joda-time</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>net.sf.opencsv</groupId>
+                            <artifactId>opencsv</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-genmodel-ext-xgboost</artifactId>
+                    <version>${h2o.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>commons-logger</groupId>
+                            <artifactId>commons-logger</artifactId>
+                        </exclusion>
+                        <exclusion>
+                            <groupId>commons-logging</groupId>
+                            <artifactId>commons-logging</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-logger</artifactId>
+                    <version>${h2o.version}</version>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>xgboost-predictor</artifactId>
+                    <version>0.3.20</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>net.jafama</groupId>
+                            <artifactId>jafama</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>ai.h2o</groupId>
+                    <artifactId>h2o-tree-api</artifactId>
+                    <version>0.3.20</version>
+                </dependency>
+                <dependency>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                    <version>2.10.1</version>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.3.2</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <version>3.1.2</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.10.1</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.basedir}/jars</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

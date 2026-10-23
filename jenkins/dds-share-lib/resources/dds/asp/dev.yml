@@ -1,0 +1,29 @@
+global:
+environment: "Dev"
+project_id: "hsbc-11505776-ddshk-dev"
+packer_region: "asia-east2"
+packer_zone: "asia-east2-a"
+packer_project_id: "hsbc-11505776-ddshk-dev"
+shared_project_id : "hsbc-6320774-vpchost-asia-dev"
+shared_subnetwork : "cinternal-vpc1-asia-east2"
+gcp_proj_number : "227165883627"
+gcp_proxy : "googleapis-dev.gcp.cloud.hk.hsbc"
+xmatters_api_host : "alertapi-uat.systems.hk.hsbc"
+xmatters_api_id : "7c2cd9e9-cb64-40b4-b15e-75fcc5523d69"
+kms_project : "hsbc-6320774-kms-dev"
+email_group: "ddsasp@noexternalmail.hsbc.com"
+ssh_secret: "ssh-key-dev"
+cloudbuild_branch: "dds-hk-dev"
+cluster_name: "ddshk-sit"
+bucketname_AMHNC: "ddshk-dev-amh-non-cards"
+tf_backend: "backendconfig_hk/dev.config"
+tf_input: "inputfiles_hk/dev.tfvars"
+ 
+sa_parallel:
+ 
+Jenkins Credentials ID : SA name
+ 
+terraform-sa-dev-asp: dds-gce-infra-sa
+ 
+networking:
+networkRegion: "asia"

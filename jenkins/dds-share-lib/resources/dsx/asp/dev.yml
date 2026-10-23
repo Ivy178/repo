@@ -1,0 +1,25 @@
+global:
+  environment: "Dev"
+  project_id: "hsbc-12614250-dsxasp-dev"
+  packer_region: "asia-east2"
+  packer_zone: "asia-east2-a"
+  packer_project_id: "hsbc-12614250-dsxasp-dev"
+  shared_project_id : "hsbc-6320774-vpchost-asia-dev"
+  shared_subnetwork : "cinternal-vpc1-asia-east2"
+  gcp_proj_number : "557287581806"
+  gcp_proxy : "googleapis-dev.gcp.cloud.hk.hsbc"
+  xmatters_api_host : "alertapi-uat.systems.hk.hsbc"
+  xmatters_api_id : "7c2cd9e9-cb64-40b4-b15e-75fcc5523d69"
+  kms_project : "hsbc-6320774-kms-dev"
+  email_group: "dsxcore@hsbc.co.in"
+  ssh_secret: "ssh-key-dev"
+  cloudbuild_branch: "dsx-hk-dev"
+  cluster_name: "dsxasp-dev"
+  bucketname_AMHNC: "ddshk-dev-amh-non-cards"
+  notify_mails: "yogesh.lokesh.tiwari@hsbc.co.in,sounak.nag@hsbc.co.in"
+  version_api_url1: "https://dsxdev.dsxasp-dev.hsbc-12614250-dsxasp-dev.dev.gcp.cloud.hk.hsbc/dsx-version-api/strategy/release/create"
+  version_api_url_base: "https://dsxdev.dsxasp-dev.hsbc-12614250-dsxasp-dev.dev.gcp.cloud.hk.hsbc/dsx-version-api"
+
+sa_parallel:
+# Jenkins Credentials ID: SA name
+  terraform-sa-dev-asp: dsx-terraform-sa

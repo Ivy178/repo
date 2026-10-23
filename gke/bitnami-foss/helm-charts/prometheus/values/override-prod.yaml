@@ -1,0 +1,52 @@
+image:
+  repository: hsbc-11941970-feedzaihase-prod/ar-container-repo/bitnami/prometheus
+  tag: 3.5.0-photon-5-r7
+  registry: asia-east2-docker.pkg.dev
+  pullPolicy: IfNotPresent
+
+persistence:
+  storageClass: "premium-rwo-cmek-prod"
+
+rabbitmqPod0: rabbitmqhase-0.rabbitmqhase-headless.hase-prod.svc.cluster.local:9419
+rabbitmqPod1: rabbitmqhase-1.rabbitmqhase-headless.hase-prod.svc.cluster.local:9419
+rabbitmqPod2: rabbitmqhase-2.rabbitmqhase-headless.hase-prod.svc.cluster.local:9419
+rabbitmqdsAddress: 192.168.193.12:9419
+rabbitmqAddress: 192.168.193.13:9419
+
+feedzaiMetricsAddress: telegraf-hase.hase-monitoring.svc.cluster.local:8080
+cmMetricsAddress: telegraf-hase.hase-monitoring.svc.cluster.local:8081
+keycloakAddress: 192.168.193.16:9990
+zookeeperAddress: 192.168.193.15:7000
+cassandraAddress: 192.168.193.11:8080
+cassandra4Address: 192.168.193.21:8080
+
+replicaCount: 3
+loadBalancerIP: 192.168.193.18
+fullnameOverride: "prometheus-hase"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+# pod podAntiAffinity and nodeAffinity
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            {{- include "prometheus.selectorLabels" . | nindent 10 }}
+          matchExpressions:
+            - key: app.kubernetes.io/instance
+              operator: In
+              values:
+                - prometheus
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+                - asia-east2-a
+                - asia-east2-b
+                - asia-east2-c

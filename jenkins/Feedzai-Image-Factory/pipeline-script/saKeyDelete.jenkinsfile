@@ -1,0 +1,24 @@
+@library('feeds_gcp_shared_libraries@main')
+properties([
+buildDiscarder(logRotator(numToKeepStr:'10')),
+// delete key in first day of every month
+pipelineTriggers ([
+parameterizedCron('''
+0 0 1 * * % cred_Id=jenkins-cicd-tooling-qa;
+0 0 1 * * % cred_Id=terraform-deployer-qa;
+0 0 1 * * % cred_Id=gce-stage3-image-builder-qa;
+''')
+]),
+parameters([
+choice(name: 'ENVIRONMENT_NAME', choices: ['Qa'], description: ''),
+choice(name: 'BUSINESS_REGION', choices: ['AP'], description: 'Business region given configuration work for'),
+// if instance increased need to add same in choices
+choice(name: 'cred_Id', choices: ['jenkins-cicd-tooling-qa','terraform-deployer-qa','gce-stage3-image-builder-qa'], description: 'Select the credential to rotate')
+])
+])
+ 
+keyDelete(
+ENVIRONMENT_NAME: "{ENVIRONMENT_NAME}",
+BUSINESS_REGION: "{BUSINESS_REGION}",
+cred_Id: "${cred_Id}"
+)

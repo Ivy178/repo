@@ -1,0 +1,198 @@
+eim: 11941970 # Unique app ID
+appname: "Feedzai_HASE_Helm-HDPV2"
+application_version: "1.0.0"
+
+log_trace:
+  enabled: true
+
+parameters:
+  - name: pwi_artefact_version
+    type: string
+    default: "200.0.4"
+    description: G3 PWI artefact version
+  - name: target_env
+    type: choice
+    description: Select the target environments for deployment
+    choices:
+      - PREPROD
+      - PROD
+  - name: overwrite_suffix
+    type: choice
+    description: align with your target env
+    choices:
+      - pre-prod
+      - prod
+  - name: namespace
+    type: choice
+    description: qa env your namespace
+    choices:
+      - "hase-monitoring"
+      - "hase-qa"
+      - "cassandra"
+  - name: prod_namespace
+    type: choice
+    description: preprod/ prod namespace
+    choices:
+      - "hase-monitoring"
+      - "hase-preprod"
+      - "hase-prod"
+      - "cassandra"
+  - name: component_name
+    type: choice
+    description: Helm component to deploy
+    choices:
+      - "cassandra"
+      - "grafana-hase"
+      - "keycloak-hase"
+      - "prometheus-hase"
+      - "rabbitmqhase"
+      - "rabbitmq-ds-hase"
+      - "telegraf-hase"
+      - "zookeeper-hase"
+  - name: chart
+    type: choice
+    description: Helm chart to deploy
+    choices:
+      - "cassandra"
+      - "grafana"
+      - "keycloak"
+      - "prometheus"
+      - "rabbitmq"
+      - "rabbitmq-ds"
+      - "telegraf"
+      - "zookeeper"
+      - "zookeeper-ds"
+  - name: reference_cr
+    type: string
+    default: "CHG6112693"
+    description: reference CR
+  - name: cr_start_time_utc
+    type: string
+    default: "2025-12-10 10:00:00"
+    description: cr start time utc
+  - name: cr_end_time_utc
+    type: string
+    default: "2025-12-12 10:00:00"
+    description: cr end time utc
+  - name: cr_auto_release_time_utc
+    type: string
+    default: "2025-12-10 10:30:00"
+    description: G3 auto release time utc
+
+# tools for user
+tools: # https://alm-confluence.systemes.uk.hsbc/confluence/display/DSALM/GCP+Jenkins+PROD+installed+tools+of+Linux+agent
+  jdk: "/usr/lib/openjdk/17.0.11+9"
+  maven: "/usr/lib/maven/3.9.6"
+  gradle: "/ds_build_new/build_tools/gradle/6.2.2"
+  nodejs: "/usr/lib/nodejs/20.9.0"
+  python: "/usr/lib/python/3.11.6"
+  terraform: "/usr/lib/terraform/1.9.2"
+  helm: "/usr/lib/helm/3.16.1"
+
+ice:
+  jenkins_credential_id: feedzai-infra-ice
+
+build:
+  zip:
+  nexus:
+    id: nexus302
+    jenkins_credential_id: GB-TrnFrd-G-Dops
+    repository: raw-alm-dev_n3p
+  artifacts:
+    - artifact_path: "com/hsbc/gdt/wpb/F24/infra"
+      artifact_name: "k8s"
+      artifact_version: "${params.pwi_artefact_version}"
+      source_path: "./"
+      #source_path: "./helm-charts/${params.chart}"
+  credential_bindings:
+    google_jenkins_credentials_file_id: "terraform-deployer-dev"
+    nexus_jenkins_credentials_id: GB-TrnFrd-G-Dops
+
+controls:
+  enabled: false
+  sonarqube:
+    enabled: false
+    project_key: dragan-test-1
+    jenkins_credential_id: YOUR_SONARQUBE_CREDS
+    java_binaries: subdirectory/target/classes
+    filesize_limit: 500
+    tests: "src/test/java"
+    sources: "src/main/java"
+    coverage: true
+  sonatype_iq:
+    enabled: false
+    jenkins_credential_id: GB-TrnFrd-G-Dops
+    organization_name: "WPB Media and Content"
+    application_categories:
+      - "Service Tier 3 "
+      - "Used within Dev or Test on an HSBC server"
+    iq_application_name: "com.hsbc.wpb.f24.infra"
+    stage: "build"
+    scan_target: "*.*"
+    force_scan: true
+    ice_component_name: "Feedzai Pulse"
+  cyberflows:
+    jenkins_credential_id: GB-TrnFrd-G-Dops
+    timeout: 120
+  sast:
+    enabled: false
+    configuration_id: 3YEo0JdcmsjO2rZVuVwR1uC0T
+  dast:
+    enabled: false
+    configuration_id: abcDEF123456ghijk17891011
+  cont:
+    enabled: false
+    configuration_id: abcDEF123456ghijk17891011
+
+deploy:
+  enabled: true
+  g3:
+    enabled: true
+    project_area: "Feedzai_Transaction_Fraud_Monitoring_HK"
+    application_name: "Feedzai HASE Helm-HDPV2"
+    jenkins_credential_id: "GB-TrnFrd-G-Dops"
+    pwls:
+      package_from_nexus:
+        - summary: "g3 HASE with standard pipeline"
+          pwi_artifact_name: "helm_deploy"
+          pwi_artifact_version: "${params.pwi_artefact_version}"
+          nexus_artifact_path: "https://nexus302.systems.uk.hsbc:8081/nexus/repository/raw-alm-dev_n3p/com/hsbc/gdt/wpb/F24/infra/k8s/${params.pwi_artefact_version}/k8s-${params.pwi_artefact_version}.zip"
+  rwi:
+    release_info:
+      summary: "g3 HASE with standard pipeline"
+      release_config_id: 7887030
+      allow_continuous_deployment: "yes"
+    deployments:
+      non_prod:
+        - summary: "g3+helm HASE with standard pipeline"
+          target_environment: "QA" #only one qa before pre/prod
+          release_now: "yes"
+          release_args:
+            component_name: "${params.component_name}"
+            chart: "${params.chart}"
+            environment_name: "qa"
+            namespace: "${params.namespace}"
+      production:
+        enabled: true
+        target_environment: "${params.target_env}"
+        reference_cr: "${params.reference_cr}"
+        planned_start_date_time_utc: "${params.cr_start_time_utc}"
+        planned_end_date_time_utc: "${params.cr_end_time_utc}"
+        auto_release_time_utc: "${params.cr_auto_release_time_utc}"
+        release_args:
+          component_name: "${params.component_name}"
+          chart: "${params.chart}"
+          environment_name: "${params.overwrite_suffix}"
+          namespace: "${params.prod_namespace}"
+
+
+
+
+儿歌网人格 二哥额热个个人二二额额e
+
+
+There was a syntax issue in the backup_common_config.yaml file. We included new tables to be considered for backup. We have updated the file to resolve the issue.
+CR creation and implementation for Project related work items , ownership lies with Devops and GAC team, APS team is responsible for post deployment activities and support.
+for enabling the api bigquery data transfer, for p4 violation remediation in asp uat env.
+
+

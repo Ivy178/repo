@@ -1,0 +1,182 @@
+properties([
+    buildDiscarder(logRotator(numToKeepStr:"10")),
+    parameters([
+        string(name: "projectId", defaultValue: "", description: "project id where current image is in", trim: true),
+        string(name: "currentImage", defaultValue: "", description: "current image which has longer than threshold", trim: true)
+    ])
+])
+
+def env_name
+def business_region
+def component
+def assembly_ver
+def n4Enabled = false
+
+pipeline {
+    agent {
+        node { label 'cm-linux' }
+    }
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    stages {
+        stage('Environment Init') {
+            steps {
+                script {
+                    wrap([$class: 'BuildUser']) {
+                        def builder = env.BUILD_USER ?: env.BUILD_USER_ID ?: 'CICD Build'
+                        addBadge(text: "Build by - ${builder}", cssClass: 'badge-text-background jenkins-!-color-purple')
+                        addBadge(text: "Project - ${params.projectId}", cssClass: 'badge-text-background jenkins-!-color-teal')
+                        addBadge(text: "Image - ${params.currentImage}", cssClass: 'badge-text-background jenkins-!-color-indigo')
+                    }
+
+                    // need to extract BUSINESS_REGION, FEEDZAI_COMPONENT,INSTALLER_ASSEMBLY_VER JUPYTERLAB_VERSION,JUPYTERLAB_VERSION then pass to image build pipeline
+                    // extract BUSINESS_REGION from projectId , extract FEEDZAI_COMPONENT from currentImage name
+                    def tmp = params.projectId.split("-")[2] + "-" + params.projectId.split("-")[3]
+                    echo "################ ${tmp} ################"
+                    if (tmp.contains("india")) {
+                        business_region = "india"
+                    } else if (tmp.contains("emea")) {
+                        business_region = "emea"
+                    } else if (tmp.contains("ap")) {
+                        business_region = "ap"
+                    } else if (tmp.contains("st")) {
+                        business_region = "apst"
+                    } else if (tmp.contains("hase")) {
+                        business_region = "hase"
+                    } else if (tmp.contains("eu")) {
+                        business_region = "uk"
+                    } else if (tmp.contains("cnet")) {
+                        business_region = "hsbcnet"
+                    } else if (tmp.contains("nm")) {
+                        business_region = "apnm"
+                    } else if (tmp.contains("mx")) {
+                        business_region = "mx"
+                    } else if (tmp.contains("us")) {
+                        business_region = "us"
+                    } else {
+                        error "Unknown BUSINESS_REGION from projectId: ${params.projectId}"
+                    }
+
+                    //env_name from tmp var
+                    if (tmp.contains("qa-dev")) {
+                        env_name = "qa"
+                    } else if (tmp.contains("-dev")) {
+                        env_name = "dev"
+                    } else if (tmp.contains("pr-prod") || tmp.contains("pre-prod")) {
+                        env_name = "pre-prod"
+                    } else if (tmp.contains("prod")) {
+                        env_name = "prod"
+                    } else {
+                        error "Unknown ENVIRONMENT_NAME from projectId: ${params.projectId}"
+                    }
+
+                    def gcpProxy = (env_name in ["dev", "qa"]) ?
+                        "googleapis-dev.gcp.cloud.hsbc" :
+                        "googleapis-prod.gcp.cloud.hsbc"
+                    def gcpCredentialId =
+                        "terraform-deployer-${env_name.toLowerCase()}-${business_region.toLowerCase()}"
+                    echo "Using GCP proxy: ${gcpProxy}"
+                    echo "Using GCP credentialId: ${gcpCredentialId}"
+
+                    def imageNameParts = params.currentImage.tokenize("-")
+                    assembly_ver = ""
+                    for (int partIndex = 0; partIndex <= imageNameParts.size() - 3; partIndex++) {            // ["feedzai", "etl", "cards", "1", "2", "3"]
+                        if (imageNameParts[partIndex].isInteger() &&
+                            imageNameParts[partIndex + 1].isInteger() &&
+                            imageNameParts[partIndex + 2].isInteger()) {
+                            assembly_ver = imageNameParts[partIndex..partIndex + 2].join(".")
+                            break
+                        }
+                    }
+
+                    if (!assembly_ver) {
+                        assembly_ver = "0.0.0"
+                        echo "No assembly version found in image name; using ${assembly_ver}"
+                    }
+
+                    def guestOsFeatureTypes = withCredentials([
+                        file(credentialsId: gcpCredentialId, variable: 'GCP_KEY')
+                    ]) {
+                        withEnv([
+                            "HTTPS_PROXY=http://${gcpProxy}:3128",
+                            "CLOUDSDK_CONFIG=${env.WORKSPACE}/.gcloud"
+                        ]) {
+                            sh(
+                                script: """
+                                    mkdir -p "\${CLOUDSDK_CONFIG}"
+                                    gcloud auth activate-service-account --key-file="\${GCP_KEY}" --quiet >/dev/null
+                                    gcloud compute images describe "${params.currentImage}" \
+                                        --project="${params.projectId}" \
+                                        --format='value(guestOsFeatures[].type)'
+                                """,
+                                returnStdout: true
+                            ).trim()
+                        }
+                    }
+
+                    echo "Guest OS Features: ${guestOsFeatureTypes}"
+                    if (guestOsFeatureTypes.tokenize().contains("GVNIC")) {
+                        n4Enabled = true
+                        echo "GVNIC detected, enabling the N4 source branch"
+                    }
+
+                    echo "Extracted assembly version: ${assembly_ver}"
+
+                    def componentNames = [
+                        "etl-inbound-daily",
+                        "etl-inbound-adhoc",
+                        "etl-cards-adhoc",
+                        "pulse-risk-engine-helper",
+                        "pulse-data-science-helper",
+                        "spcoe-rhel-proxy-server",
+                        "historical-data-loading",
+                        "case-manager-helper",
+                        "logstash-recovery",
+                        "cloudsqlvacuumcm",
+                        "etl-inbound",
+                        "cloudsql-dante",
+                        "pulse-dsf-cards",
+                        "etl-recover",
+                        "case-manager",
+                        "reference-data",
+                        "batch-processor",
+                        "etl-cards",
+                        "etl-adhoc",
+                        "logstash",
+                        "pulse-dsf",
+                        "pulse",
+                        "etl"
+                    ]
+
+                    component = componentNames.find { params.currentImage.contains(it) }
+                    if (component) {
+                        echo "Detected FEEDZAI_COMPONENT: ${component}"
+                    } else {
+                        error "Unknown FEEDZAI_COMPONENT from CURRENT_IMAGE: ${params.currentImage}"
+                    }
+                    // print business_region, env and component for debug
+                    echo "Business Region: ${business_region}, Environment: ${env_name}, Component: ${component}, assembly version: ${assembly_ver}"
+                }
+            }
+        }
+
+        stage('Trigger Image Factory Pipeline') {
+            steps {
+                script {
+                    build job: 'image_factory_entrypoint', parameters: [
+                        string(name: 'ENVIRONMENT_NAME', value: "${env_name.toUpperCase()}"),
+                        string(name: 'BUSINESS_REGION', value: "${business_region.toUpperCase()}"),
+                        string(name: 'GCP_TERRAFORM_SA_KEY', value: "terraform-deployer-${env_name.toLowerCase()}-${business_region.toLowerCase()}"),
+                        string(name: 'GIT_CREDENTIALS', value: "GitHub_App_Integration"),
+                        string(name: 'FEEDZAI_COMPONENT', value: "${component}"),
+                        string(name: 'INSTALLER_ASSEMBLY_VER', value: "${assembly_ver}"),
+                        booleanParam(name: 'N4', value: n4Enabled)
+                    ]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,157 @@
+
+# 自我介绍    //GCP方向 DevOps 5年
+Hi, nice to meet you. I'm JUN, and I'm a DevOps Engineer with 5 years of experience, in cloud infrastructure, CI/CD, and automation. mainly focused on Google Cloud Platform.
+I've been working on infrastructure automation with Terraform, CI/CD implementation using Jenkins, and container operations on GKE.
+I also have hands‑on experience with networking and security in GCP, including Shared VPC, firewall policies, IAM role design, and service account management.
+In my recent projects, I helped standardize infrastructure modules, improve deployment consistency across environments, and reduce release time through pipeline automation. I also supported monitoring and incident response using cloud‑native observability practices.
+I'm a modest person who is eager to learn, and I enjoy solving problems and learning new technologies.
+I'm very interested in this position, it matches my background in [skills] and gives me the opportunity to contribute to [team/business goal].
+Thank you for the opportunity.
+
+
+
+# 行为类试题
+1、你为什么对我们公司/这个岗位感兴趣?
+I’m drawn to this role because your company’s priorities align well with my technical background. I hope to bring my skills to the team and grow alongside everyone.
+
+2、请分享一次你在压力下完成任务的经历。
+I once handled an urgent production issue with a tight time window. I stayed focused, worked with the team to diagnose the root cause, and resolved it before the deadline. Pressure helped me improve my problem-solving and communication skills.
+
+3、简单介绍你最近一段工作经历
+My latest role is a platform engineer. I focus on cloud infrastructure, CI/CD and incident troubleshooting. I automated infrastructure provisioning and helped reduce manual operation work.
+
+
+4、描述一次你处理团队冲突的经历。
+My team had conflicting opinions on project priorities. I facilitated open discussion, clarified business goals, and helped the team align on tasks. We delivered the project smoothly. This taught me the importance of communication in teamwork.
+中文:团队在项目优先级上意见不一致。我组织沟通,理清业务目标,帮助大家对齐任务。项目顺利交付。我体会到团队协作中沟通的重要性。
+
+
+5、你最大的优点和缺点分别是什么?
+Strength: I'm good at troubleshooting and infrastructure automation. I focus on delivering stable systems and collaborate well with developers.
+Weakness: I used to take on too many tasks at once. Now I prioritize work and negotiate scope properly to avoid overcommitting.
+中文优点:我擅长故障排查和基础设施自动化，专注交付稳定系统，和研发协作顺畅。
+中文缺点:我以前会同时承接太多任务。现在我会做好优先级管理，合理协商范围，避免工作量过载。
+
+
+6、讲述一次你失败的经历,以及你从中学到了什么。
+I once rushed a pipeline deployment without sufficient pre-checks. It triggered runtime errors and delayed delivery.
+I took this as a lesson. Now I define clear acceptance criteria and conduct thorough testing before any release to reduce risks.
+中文:
+我曾经仓促上线一条流水线，前置检查不足，引发运行错误，耽误交付。
+这件事给了我教训。现在每次发布前，我都会明确验收标准并充分测试，降低风险。
+
+
+7、什么类型的工作能激励你?
+I feel motivated when I can tackle complex technical problems and build reliable infrastructure.
+I love seeing my automation and optimization efforts bring tangible benefits to the team. I also value continuous learning in daily work.
+中文:
+当我可以攻克复杂技术问题、搭建可靠基础设施时，我会很有动力。
+我很享受自动化与优化工作给团队带来实际收益的过程。我也看重工作中持续学习的机会。
+
+8、请做一个自我介绍。
+I'm ___, a platform engineer with X years of cloud and data engineering experience.
+I work with K8s, Terraform and CI/CD to automate infrastructure, maintain cloud services and resolve production issues.
+I'm passionate about building reliable systems and I'm excited about this opportunity.
+中文翻译:我是___,一名拥有 X 年云与数据工程经验的平台工程师。
+我使用 K8s、Terraform 和 CI/CD 实现基础设施自动化,维护云服务并处理线上问题。
+我热衷于搭建可靠系统,很期待这次机会。
+
+
+9、你为什么选择我们公司/这个岗位?
+Your company's technology direction really interests me. This position lets me apply my cloud infrastructure and automation skills.
+I hope to contribute to your team's projects and gain experience working on your production systems.
+中文：贵公司的技术方向深深吸引我。这个岗位能够让我运用云基础设施与自动化相关技能。
+我希望为团队项目贡献力量，同时在贵司的生产系统中积累经验。
+
+
+# 动机与岗位匹配类
+10、你为什么选择这个行业/业务领域?
+I picked this field because 
+I love solving infrastructure and pipeline problems. This area offers constant learning opportunities and my work can directly support business outcomes.
+中文：
+我选择这个领域，是因为云和数据系统推动数字化转型。
+我喜欢解决基础设施和数据管道相关问题。这个领域能让我不断学习，我的工作也可以直接支撑业务落地。
+
+11、你对我们公司有哪些了解?
+I understand GTO is Standard Chartered's core tech function. It executes cloud-first transformation and builds global data platforms 
+中文翻译：我了解 GTO 是渣打的核心技术部门，在金融监管框架下推进云优先转型，搭建全球数据平台
+
+
+12、你未来3-5年的职业规划是什么?
+Over the next three to five years, I aim to become a strong senior engineer. I will build up my cloud and data skills and own core platform modules.
+中文翻译：
+3 到 5 年内，我希望成长为资深工程师，深化云与数据领域专业能力，负责平台核心模块。
+
+
+13、如果入职,短期内你会如何开展工作?
+In the short term, I will learn the tech stack and team workflows first.
+I'll communicate closely with colleagues to understand system design, start with smaller deliverables, and gradually take ownership to improve platform reliability.
+中文：
+短期内，我会先熟悉技术栈与团队工作流程。我会和同事密切沟通，理解系统设计，从小任务做起，逐步承担职责，提升平台可靠性。
+
+
+# 过往经历深挖
+14、请分享一个你最有成就感的项目及成果。
+I automated infrastructure deployment for data pipelines. It saved lots of manual work and lowered deployment failures. That was my most rewarding project.
+中文翻译：我实现数据管道基础设施部署自动化，节省大量人工、降低部署故障，这是我最有成就感的项目。
+
+
+
+
+
+
+
+15、讲一次你克服工作中重大挑战的经历
+I resolved a complex issue in which the core data pipeline kept failing and impacted several business teams.
+I analyzed logs, reproduced the issue and found the resource bottleneck. After configuration tuning, the pipeline became much more stable.
+I learned to troubleshoot complex problems step by step.
+中文翻译：
+我曾处理一个棘手问题，核心数据管道持续报错，影响多个业务团队。
+我分析日志、复现问题，定位到资源瓶颈。调优配置后，管道稳定性大幅提升。
+这件事教会我分步排查复杂问题。
+
+16、讲一次你同时处理多任务、排优先级的经历
+When handling multiple tasks, I prioritise by urgency and business impact. I focus on critical items first and keep others informed to avoid bottlenecks.
+中文翻译：
+多任务并行时，我依据紧急度和业务影响排优先级，先聚焦关键事项，保持信息同步，规避卡点。
+
+17、你如何看待加班?
+I accept overtime for emergencies and critical deadlines. Meanwhile, I try to use automation and better planning to avoid frequent last-minute rushes.
+中文翻译：
+遇到紧急情况和关键截止日期，我可以接受加班。同时，我会用自动化和更好的规划，避免频繁的临时赶工。
+
+18、如果让你负责一个很重要的但很艰难的工作,你会怎么处理?
+I'll split the tough work into smaller tasks, confirm requirements and potential risks first.
+I set clear priorities, track progress closely, and seek help early when facing blockers to avoid delays.
+中文翻译：
+我会先把困难工作拆分成小任务，确认需求和潜在风险。设定清晰优先级，紧密跟进进度，遇到阻碍尽早寻求协助，避免延期。
+
+21、你手头有其他 Offer 吗?会如何选择?
+I have other interviews underway. I focus on role fit and growth potential. This opportunity aligns best with my career direction.
+中文翻译：我还有其他面试在推进。我重点看岗位匹配度和成长空间，这个机会和我的职业方向最契合。
+
+# 情景模拟
+22、如果你发现队友工作产出不达标,你会怎么做
+I will have a private chat with my teammate to identify problems and help find solutions. If issues persist, I will inform our lead early to protect project progress.
+中文翻译：我会私下和队友沟通定位问题，协助寻找解决方案。如果问题持续，我会提前告知负责人，保障项目进度。
+
+23、客户对你的交付成果非常不满,你怎么处理
+I listen to customer complaints first to clarify their expectations. I provide a fix plan and keep them posted. I also learn lessons for future work.
+中文翻译：我先倾听客户不满，理清他们的预期，给出修复方案并同步进展，同时吸取教训优化后续工作。
+
+24、两位经理给了你互相冲突的指令,你第一步怎么做
+First I document both requirements. Then I raise the conflict to both managers to align priorities, rather than decide by myself.
+中文翻译：首先我记录两边需求，然后向两位经理提出冲突，对齐优先级，而不是自行决定。
+
+# 收尾
+25、你的期望薪资范围是多少
+I expect compensation aligned with market standards for this position.
+中文翻译：我期望薪酬和该岗位市场标准保持一致，合适阶段可以协商。
+
+26、你什么时候可以到岗
+I'm available to start immediately.
+
+
+
+ 
+

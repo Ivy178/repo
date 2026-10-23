@@ -1,0 +1,16 @@
+[Unit]
+Description=Airflow Celery Flower UI
+After=network.target cloud-sql-proxy.service airflow-scheduler.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Group=root
+Type=simple
+ExecStart=/bin/bash -ce "/usr/local/bin/airflow celery worker 2>&1 >> /var/log/celery.log"
+Restart=always
+RestartSec=5s
+ 
+[Install]
+WantedBy=multi-user.target

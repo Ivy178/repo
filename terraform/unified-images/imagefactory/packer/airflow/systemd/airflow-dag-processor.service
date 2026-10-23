@@ -1,0 +1,17 @@
+[Unit]
+Description=Airflow DAG Processor daemon
+After=network.target cloud-sql-proxy.service airflow-db-upgrade.service
+Wants=cloud-sql-proxy.service airflow-db-upgrade.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Group=root
+Type=simple
+ExecStart=/bin/bash -ce "/usr/local/bin/airflow dag-processor 2>&1 >> /var/log/dag-processor.log"
+Restart=always
+RestartSec=5s
+ 
+[Install]
+WantedBy=multi-user.target

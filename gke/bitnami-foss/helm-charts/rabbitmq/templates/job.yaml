@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "rabbitmq.fullname" . }}-init
+  labels:
+    {{- include "rabbitmq.labels" . | nindent 4 }}
+spec:
+  # Automatically delete job after 10 minutes
+  # to avoid conflicts during redeployment of chart
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      serviceAccountName: {{ include "rabbitmq.serviceAccountName" . }}
+      initContainers:
+        - name: secretmanager
+          image: "{{ .Values.sm.image.registry }}/{{ .Values.sm.image.repository }}:{{ .Values.sm.image.tag }}"
+          imagePullPolicy: {{ .Values.sm.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.sm.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.sm.resources | nindent 12 }}
+          # Use args to avoid override command
+          args:
+            - -c
+            - /secrets_in/secrets.ini
+          volumeMounts:
+            - name: secrets-ini-configmap
+              mountPath: /secrets_in/
+            - name: secrets-emptydir
+              mountPath: /secrets/
+      containers:
+        - name: rabbitmq-init
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              /var/lib/rabbitmq-init/rabbitmq-init.sh
+          volumeMounts:
+            - name: configuration
+              mountPath: /etc/rabbitmq/conf.d/
+            - name: init
+              mountPath: /var/lib/rabbitmq-init
+            - name: secrets-emptydir
+              mountPath: /secrets/
+      volumes:
+        - name: configuration
+          secret:
+            secretName: {{ include "rabbitmq.fullname" . }}-config
+            defaultMode: 420
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+        - name: init
+          secret:
+            secretName: {{ include "rabbitmq.fullname" . }}-init
+            defaultMode: 500
+            items:
+              - key: rabbitmq-init.sh
+                path: rabbitmq-init.sh
+        - name: secrets-ini-configmap
+          configMap:
+            name: {{ include "rabbitmq.fullname" . }}-secrets-ini
+        - name: secrets-emptydir
+          emptyDir:
+      restartPolicy: Never

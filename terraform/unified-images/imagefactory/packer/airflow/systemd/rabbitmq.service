@@ -1,0 +1,16 @@
+[Unit]
+Description=Configure rabbitMQ Server
+After=network-online.target NetworkManager.service env-configure.service cloud-sql-proxy.service airflow-scheduler.service
+ 
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStartPre=chmod +x /usr/local/sbin/rabbitmq.sh
+ExecStart=/bin/bash /usr/local/sbin/rabbitmq.sh
+Restart=on-failure
+RestartSec=5s
+PrivateTmp=true
+ 
+[Install]
+WantedBy=multi-user.target

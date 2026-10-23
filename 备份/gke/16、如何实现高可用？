@@ -1,0 +1,28 @@
+# 跨 Zone 部署怎么做
+多可用区节点池
+topologySpreadConstraints
+Pod 反亲和性(Pod Anti-Affinity)
+
+# 探针
+Readiness Probe:决定 Pod 是否接收流量  //对零停机发布尤其重要
+Liveness Probe:应用异常时重启容器
+Startup Probe:给启动较慢的应用预留启动时间
+
+# 开启自动修复和自动伸缩
+节点自动修复:发现节点异常后,GKE 自动重建或替换节点
+HPA:根据负载增加或减少 Pod
+Cluster Autoscaler:根据 Pod 调度需求调整节点数量
+
+# 配置零停机发布
+Deployment 使用滚动更新，并合理设置：
+maxUnavailable: 0
+maxSurge
+Readiness Probe
+PDB
+! 新 Pod 通过健康检查后再接收流量，旧 Pod 最后才被删除。
+
+# 数据层也要做高可用
+数据库主从或多副本
+跨 zone 部署
+持久化存储
+定期备份和恢复演练

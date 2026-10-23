@@ -1,0 +1,33 @@
+Kafka 运维的核心是保障数据不丢、消费不积压、集群不宕机，重点围绕四个方面展开。
+
+📊 监控告警：盯住关键指标
+这是运维的“眼睛”。需要重点监控以下指标：
+· UnderReplicatedPartitions (URP)：副本未同步的分区数，正常应为 0，持续大于 0 意味着有 Broker 压力过大或网络故障。
+· Consumer Lag：消费者积压量，直接反映消费是否跟得上生产，是重中之重。
+· ActiveControllerCount：整个集群必须恒为 1，若出现 0 或大于 1，说明集群状态异常。
+· 磁盘与资源：监控磁盘使用率、CPU、网络等。
+
+落地工具：通常采用 Prometheus + Grafana 组合，通过 JMX Exporter 或 Kafka Exporter 采集指标并配置告警。
+
+
+📈 容量规划：提前算好账
+避免资源不足导致性能下降或浪费。
+· 副本因子 (RF)：生产环境必须设为 3，配合 min.insync.replicas=2 保证数据可靠性。
+· 分区数：决定并行度，建议设为 Broker 数量的整数倍。
+· 存储估算：公式为 平均流入流量 × 保留时长 × 副本因子，并预留 10% 余量。
+· 磁盘类型：优先使用 SSD/NVMe 以保证 I/O 性能。
+
+
+🛠️ 故障处理：积压首选查 Rebalance
+消息积压、重复、丢失等问题绝大多数与 Rebalance 有关。
+· 排查 Rebalance 原因：常见于消费者数量变化、分区扩容、或消费者处理超时（max.poll.interval.ms）。
+· 应急处理：扩容消费者（不超过分区数）并调小 max.poll.records，防止处理超时被踢出组。
+· 根因治理：优化消费者处理逻辑，或调整 session.timeout.ms 等超时参数。
+
+
+🔐 安全加固：默认拒绝
+
+生产环境必须启用 ACL 权限控制。
+· 关键配置：务必设置 allow.everyone.if.no.acl.found=false，确保默认拒绝所有未授权访问。
+· 传输加密：启用 SSL/TLS 保护数据传输安全。
+一句话总结：URP 盯副本同步，Lag 盯消费积压，RF=3 加 minISR=2 保数据，Rebalance 是积压元凶，ACL 必须默认拒绝。

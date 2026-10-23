@@ -1,0 +1,54 @@
+DevOps/SRE 岗位对 ELK 的掌握，重点不是“会装”，而是“会用 ELK 做可观测性和故障排查”。在银行/金融场景下，还要加上合规、安全和成本控制。可以用五个字概括：采、存、查、告、优。
+
+1. 采：日志采集与管道
+这是 DevOps 日常最直接接触的部分。
+· 采集器选型：Filebeat（轻量、常用）、Fluent Bit / Fluentd（K8s 环境主流，EFK 栈）。要清楚各自适用场景，比如 K8s 里通常用 DaemonSet 部署 Fluent Bit 采集节点日志。
+· Logstash pipeline：input → filter → output 三阶段。重点掌握 Grok 正则解析、mutate 字段处理、date 时间戳解析，以及如何把 Kafka 作为 input/output 做缓冲。
+· K8s 日志采集：如何采集 Pod stdout、如何给日志打上 namespace/pod/label 标签、如何处理多行日志（如 Java 异常堆栈）。
+
+
+
+2. 存：索引与生命周期管理
+ELK 能不能用得稳、用得省，全看这一块。
+· 索引设计：按天/按周建索引，mapping 不要动态映射导致字段爆炸。
+· ILM（Index Lifecycle Management）：Hot → Warm → Cold → Delete 四阶段。银行日志通常要保留 6 个月到 1 年，必须配 ILM 自动 rollover 和删除，否则磁盘很快爆。
+· 分片与副本：分片不是越多越好，单分片 10-50GB 比较合理；副本至少 1 个保证高可用。
+
+
+
+3. 查：搜索与可视化
+DevOps 用 ELK 不是为了看日志，是为了快速定位问题。
+· Kibana 查询：KQL 语法、字段过滤、时间范围筛选。要能快速从海量日志里捞出某个 trace ID 或 request ID 的完整链路。
+· Dashboard 搭建：给业务和运维做面板，比如错误率趋势、慢请求 TOP、Pod 重启次数。
+· 与 APM 结合：如果用了 Elastic APM，要能把日志和 trace 关联起来，做分布式链路追踪。
+
+
+
+4. 告：告警与集成
+ELK 不只是“看”，还要能“通知”。
+· Elasticsearch Watcher / Kibana Alerting：基于查询结果触发告警，比如 5 分钟内错误日志超过阈值。
+· 与现有告警链路集成：把告警发到 Slack、PagerDuty、企业微信，或者对接到 Prometheus Alertmanager。
+· 和 Prometheus/Grafana 的分工：ELK 偏日志和文本检索，Prometheus 偏指标和时序数据，Grafana 做统一展示。面试常问“日志和指标怎么配合排查”。
+
+
+
+5. 优：性能、成本与安全
+这是区分“会用”和“用得好”的关键。
+· 性能调优：refresh interval 调大（如 30s）提升写入性能；慢查询分析、force merge 减少分片；JVM 堆内存和 GC 调优。
+· 成本控制：热温冷架构、压缩存储、按需保留。银行场景还要考虑数据本地化和合规。
+· 安全与合规：TLS 加密、RBAC 权限控制、审计日志、PII 脱敏（比如日志里不能出现卡号、身份证号）。在金融行业，这些是必问点。
+
+
+
+
+面试口语化总结
+“DevOps 对 ELK 的掌握，重点在采、存、查、告、优。采就是 Filebeat/Fluent Bit 采集，Logstash 解析；存就是索引设计和 ILM 生命周期；
+查就是 Kibana 快速定位问题；告就是告警集成；优就是性能、成本和安全。银行场景还要特别关注合规和日志保留。”
+优先级建议
+如果时间有限，按这个顺序准备：
+1. K8s 日志采集（Fluent Bit/Filebeat + EFK）
+2. ILM 索引生命周期管理
+3. Kibana 查询和 Dashboard
+4. 告警集成
+5. 性能调优和安全合规
+这样准备，既能应对面试，也能在实际工作中直接上手。

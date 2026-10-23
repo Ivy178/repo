@@ -1,0 +1,32 @@
+@Library('feedz_gcp_shared_libraries@main') _
+ 
+properties([
+buildDiscarder(logRotator(numToKeepStr:"10")),
+parameters([
+string(name: "ENVIRONMENT_NAME", choices: ["qa"], description: "Environment", trim: true),
+choice(name: "BUSINESS_REGION", choices: ["APST","INDIA","AP","HASE","EU"], description: "Business region given configuration work for"),
+choice(name: "IMAGE", choices: ["sql-backup", "sql-analyzer","brett-helper"], description: "Choose the image to build"),
+string(name: "TAGS", defaultValue: "", description: "Comma-separated list of tags assigned to the image like: latest,v1.0,v2.0,etc-", trim: true),
+string(name: "BRANCH", defaultValue: "main", description: "Branch of the Docker repo u like to run", trim: true),
+booleanParam(name: "PUSH_TO_NEXUS", defaultValue: true, description: "Push docker image to Nexus. Only the fisrt tag from the list of tags will be pushed due to Nexus limitations"),
+booleanParam(name: "PUSH_TO_GCR", defaultValue: true, description: "Push docker image to GCR"),
+booleanParam(name: "RUN_DOCKER_IMAGE_SCAN", defaultValue: true, description: "Run docker image scan against the image pushed to Nexus"),
+string(name: "SEND_SCAN_REPORT_TO", defaultValue: "", description: "Comma-separated list of STAFF_IDs to recieve scan report, like: GB-RANDOM-SERVICE,13371337", trim: true)
+])
+])
+ 
+dockerImageBuild(
+ENVIRONMENT_NAME: "{ENVIRONMENT_NAME}",
+BUSINESS_REGION: "{BUSINESS_REGION}",
+GCP_TERRAFORM_SA_KEY: "terraform-deployer-{ENVIRONMENT_NAME}-{BUSINESS_REGION.toLowerCase()}",
+GIT_CREDENTIALS: "GitHub App Integration",
+NEXUS302_CREDENTIALS: "NEXUS302_SA_TOKEN",
+NEXUS3_HK_CREDENTIALS: "NEXUS3_HK_SA_TOKEN",
+IMAGE: "{IMAGE}",
+TAGS: "{TAGS}",
+BRANCH: "{BRANCH}",
+PUSH_TO_NEXUS: "{PUSH_TO_NEXUS}",
+PUSH_TO_GCR: "{PUSH_TO_GCR}",
+RUN_DOCKER_IMAGE_SCAN: "{RUN_DOCKER_IMAGE_SCAN}",
+SEND_SCAN_REPORT_TO: "${SEND_SCAN_REPORT_TO}"
+)

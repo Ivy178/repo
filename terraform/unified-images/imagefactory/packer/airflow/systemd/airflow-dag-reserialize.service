@@ -1,0 +1,19 @@
+[Unit]
+Description=Airflow one-time DAG reserialize bootstrap
+After=network.target cloud-sql-proxy.service gcs_fuse.service airflow-db-upgrade.service airflow-scheduler.service
+Wants=cloud-sql-proxy.service gcs_fuse.service airflow-db-upgrade.service airflow-scheduler.service
+ 
+[Service]
+Environment="AIRFLOW_HOME=/opt/airflow"
+EnvironmentFile=/etc/sysconfig/airflow
+User=root
+Group=root
+Type=oneshot
+ExecStartPre=/bin/sleep 300
+ExecStartPre=/usr/bin/chmod +x /usr/local/sbin/airflow_dag_reserialize_once.sh
+ExecStart=/bin/bash /usr/local/sbin/airflow_dag_reserialize_once.sh
+StandardOutput=syslog
+StandardError=syslog
+ 
+[Install]
+WantedBy=airflow-scheduler.service

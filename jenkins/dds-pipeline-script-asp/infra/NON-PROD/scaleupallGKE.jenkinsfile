@@ -1,0 +1,18 @@
+@Library('jenkins-shared-libs@main') _
+ 
+properties([
+buildDiscarder(logRotator(numToKeepStr:'10')),
+parameters([
+choice(name: 'ENVIRONMENT_NAME', choices: ['Qa'], description: ''),
+choice(name: 'BUSINESS_REGION', choices: ['AP'], description: 'Business region given configuration work for'),
+choice(name: 'STATUS', choices: ['UP','DOWN'], description: 'Business region given configuration work for'),
+choice(name: 'GCP_TERRAFROM_SA_KEY', choices: ['terraform-deployer-qa'], description: 'GCP service account key for terraform deployment')
+])
+])
+ 
+k8sScaleUp{
+ENVIRONMENT_NAME: "{ENVIRONMENT_NAME}",
+BUSINESS_REGION: "{BUSINESS_REGION}",
+STATUS: "${STATUS}",
+GCP_TERRAFROM_SA_KEY: 'terraform-deployer-qa'
+}

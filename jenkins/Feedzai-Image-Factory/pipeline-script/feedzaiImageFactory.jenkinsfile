@@ -1,0 +1,25 @@
+@library('feeds_gcp_shared_libraries@main')
+properties([
+buildDiscarder(logRotator(numToKeepStr:'20')),
+parameters([
+choice(name: 'ENVIRONMENT_NAME', choices: ['DEV', "QA", "PRE-PROD", "PROD"], description: ""),
+choice(name: 'BUSINESS_REGION', choices: ["AP", "UK", "WASE", "APST", "INDIA", "INDIA-RMA", "EMEA", "ISBCHET", "APIM", "MX","US"], description: "Business region given configuration work for"),
+choice(name: "FEEDZAI_COMPONENT", choices: ["etl1", "etl-inbound", "etl-inbound-daily", "etl-cards", "etl-adhoc", "etl-inbound-adhoc", "etl-cards-adhoc", "etl-recover","case-manager", "case-manager-helper", "logstash", "logstash-recovery", "pulse", "pulse-risk-engine-helper", "pulse-dsf", "pulse-dsf-cards", "pulse-data-science-helper", "reference-data","spcoe-rhel-proxy-server", "cloudsqlvacuumer","cloudsql-dante","historical-data-loading","batch-processor"], description: ""),
+choice(name: "INSTALLER_ASSEMBLY_VER", choices: ["3.1.2","3.1.1","3.1.0","3.0.4","3.0.3","3.0.2","3.0.1","3.0.0","2.11.3","2.10.1","0.0.0"], description: "Supported feedzai version", trim: true),
+booleanParam(name: "N4", defaultValue: false, description: "Use the development/-N4 branch")
+])
+])
+ 
+feedzaiImageFactory(
+ENVIRONMENT_NAME: "{ENVIRONMENT_NAME}",
+BUSINESS_REGION: "{BUSINESS_REGION}",
+GCP_TERRAFORM_SA_KEY: "terraform-deployer-{ENVIRONMENT_NAME.toLowerCase()}-{BUSINESS_REGION.toLowerCase()}",
+GIT_CREDENTIALS: "Github_App_Integration",
+FEEDZAI_COMPONENT: "{FEEDZAI_COMPONENT}",
+INSTALLER_ASSEMBLY_VER: "{INSTALLER_ASSEMBLY_VER}",
+GIT_BRANCH: (FEEDZAI_COMPONENT == "spcoe-rhel-proxy-server" && params.N4 ) ?
+"feature/proxy-in-out-n4" :
+(FEEDZAI_COMPONENT in ["spcoe-rhel-proxy-server", "cloudsql-dante"]) ?
+"main" :
+"development/{INSTALLER_ASSEMBLY_VER}{params.N4 ? '-N4' : ''}"
+)
