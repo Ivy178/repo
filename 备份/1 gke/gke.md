@@ -149,9 +149,7 @@ Deployment 支持 RollingUpdate（滚动更新，默认）和 Recreate（先删�
 发布模式常见：滚动发布、蓝绿发布、金丝雀发布、灰度发布。滚动最常用，蓝绿切流量快，金丝雀按比例放量。
 
 > 怎么保证发布不影响业务
-核心靠 探针 + 滚动更新 + PDB + 优雅停机。readiness 探针确保就绪才接流量，liveness 探针挂了自动重启，startup 探针保护慢启动。滚动更新 maxUnavailable 设 0，PDB 保最小可用副本，preStop 做优雅停机。
-除此之外还可以用 Service Mesh 做流量切分、Argo Rollouts 做金丝雀、Feature Flag 控制功能开关。
-// 优雅停机 = 先摘流量 → 再通知应用 → 等它处理完 → 最后才杀。核心是让“关闭”变得可控，而不是突然断电。
+滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
 
 
 
@@ -358,7 +356,7 @@ PodDisruptionBudget，简称 PDB，是 K8s 里用来限制自愿中断时，同�
 - 基础设施层使用跨 zone 节点池、节点自动修复和自动伸缩；                //跨 zone 节点池,自动修复
 - 维护和升级时使用 PodDisruptionBudget，限制同时中断的 Pod 数量；      //PodDisruptionBudget
 - 发布时使用滚动更新和 Readiness Probe，保证零停机。                   //健康检查
-- 对于数据库等有状态组件，还需要额外配置复制、跨 zone、持久化存储和备份
+- 对于数据库等有状态组件，数据库主从或多副本、跨 zone、持久化存储和备份
 
 
 

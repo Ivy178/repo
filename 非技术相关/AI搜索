@@ -44,10 +44,18 @@ Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
 
 
 
-Terraform provisioning 是什么？有什么用？
-聚集核心，给口语化，30s之内 的面试回答, 前后要有逻辑
 
 
-给汇丰、渣打、花旗 技术岗关于terraform的面经，不要题库，不要编造，要互联网能找到的经历
 
 
+
+
+# kibana
+Operator 有什么用，用途？
+聚集核心，给口语化，20s之内 的面试回答, 前后要有逻辑
+聚集核心，给口语化，30s之内 的面试回答 描述上面的过程, 前后要有逻辑
+
+
+
+汇丰渣打 怎么部署 redis ?
+不要编造，要互联网能找到的来源

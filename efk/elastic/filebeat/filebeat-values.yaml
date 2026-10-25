@@ -1,0 +1,18 @@
+daemonset:
+  enabled: true
+  filebeatConfig:
+    filebeat.yml: |
+      filebeat.inputs:
+      - type: container
+        paths:
+          - /var/log/containers/*.log
+        processors:
+          - add_kubernetes_metadata:
+              host: ${NODE_NAME}
+              matchers:
+              - logs_path:
+                  logs_path: "/var/log/containers/"
+      output.elasticsearch:
+        hosts: ['${ELASTICSEARCH_HOSTS:elasticsearch-master:9200}']
+        worker: 2
+        bulk_max_size: 2048
