@@ -26,7 +26,7 @@
 
 容量、高可用、存储
 - 无状态服务不依赖本地数据?
-- 数据库优先用云托管服务?
+- 数据库优先用云托管服务?  
 
 # 待解决问题
 Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
