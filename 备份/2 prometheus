@@ -32,6 +32,8 @@ Pushgateway：推模式网关，补充支持短生命周期任务的指标推送
 动态仪表盘：支持通过变量定义（如选择不同的“服务器”或“命名空间”），实现仪表盘的动态交互，无需创建无数个重复的图表。告警与协作：
 Grafana 也具备较新的统一告警能力，可以在图表上直接配置告警规则并集成到企业通讯工具。
 
+
+
 # 怎么采集
 > exporter有什么用
 Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式的系统，采集并转成 metrics 指标，
@@ -84,6 +86,7 @@ inhibit_rules 做告警抑制，避免重复轰炸。
 - 每条规则写 alert 告警名、expr PromQL表达式、for 持续时间，再加 labels 和 annotations。
 - metadata 上打对 label，匹配prometheus release 名称
 - 用kubectl get prometheusrules查看是否生效
+
 
 > 怎么查询/PromQL
 PromQL 查询我一般按“选指标—算速率—做聚合—出结果”来：先用指标名和标签筛数据，比如 node_cpu_seconds_total{mode="idle"}；
