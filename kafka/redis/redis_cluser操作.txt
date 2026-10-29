@@ -1,0 +1,67 @@
+## 初始化集群（3主3从示例）
+redis-cli --cluster create \
+  10.0.1.11:6379 10.0.1.12:6379 10.0.1.13:6379 \
+  10.0.1.21:6379 10.0.1.22:6379 10.0.1.23:6379 \
+  --cluster-replicas 1 \
+  --cluster-yes
+
+
+## 槽位管理与迁移（reshard）
+# 查看集群槽位分布
+redis-cli --cluster check 10.0.1.11:6379
+
+# 重新分片（指定源和目标节点）
+redis-cli --cluster reshard 10.0.1.11:6379 \
+  --cluster-from <source-node-id> \
+  --cluster-to <target-node-id> \
+  --cluster-slots 1024 \
+  --cluster-yes
+
+# 平衡各节点槽位（自动均分）
+redis-cli --cluster rebalance 10.0.1.11:6379 \
+  --cluster-use-empty-masters
+
+
+
+> 主从复制配置
+主要设置repl-backlog-size，设置越大，从节点断线重连后，同步差异的成功率越高
+repl-timeout 60 主节点判定从节点下线的时间阈值（秒）
+
+> Sentinel
+负责监控主从节点健康状态、自动执行主从切换、并向客户端推送新的主节点地址（告诉客户端从新节点写入）
+
+> RDB、AOF配置
+RDB主要设置save，比如save 300 10，300秒内至少10次写操作，立即保存
+AOF主要设置appendfsync，比如设置everysec，每秒刷一次，最多丢失 1 秒数据，性能损失可接受。
+
+> 怎么建集群
+用cluster create创建集群，如果指定6个节点的IP、replicas为1，就会创建3主3从集群
+
+> 怎么迁移槽位
+用check查看有多少槽位
+用reshard分配槽位
+用rebalance做微调，平衡槽位数量
+
+> 能直接用rebalance?
+不能，新节点刚加入集群时是 0 个槽，默认会被 rebalance 直接忽略, 分配不到槽位，所以不能直接rebalance
+
+
+
+> Operator
+Operator做了什么StatefulSet只管Pod死活，不懂Redis集群拓扑。扩分片时它只负责拉起新Pod，至于CLUSTER MEET、槽位迁移、主从分配——一概不管。
+Operator把运维经验编码成软件，替你干了所有重复劳动。
+
+> 关系
+CRD 是声明，Operator 是执行者
+
+
+
+> operator 部署
+第一步把 Operator 装进去（通常用 Helm），它会把 CRD 和控制器一起注册好。
+第二步写一个 RedisCluster 资源 apply 上去，声明你要几个分片、多大资源、要不要持久化。Operator 监听到这个声明后，就会自动把 StatefulSet、Service 和集群拓扑全部拉起来，不需要你手写底层 YAML。
+
+> operator版本：OT-CONTAINER-KIT
+
+> 如果发现 CRD 没注册？
+直接 apply 官方提供的 CRD 清单即可
+kubectl apply -f https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/main/deploy/crds/redis.opstree.dev_redis_crd.yaml

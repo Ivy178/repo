@@ -1,0 +1,92 @@
+下面以主流的 OT-CONTAINER-KIT(Opstree)Redis Operator 为例，走一遍从安装到创建 RedisCluster 的完整流程。
+
+# 安装 Operator(Helm)
+helm repo add ot-helm https://ot-container-kit.github.io/helm-charts/
+helm repo update
+
+helm install redis-operator ot-helm/redis-operator \
+  --namespace ot-operators \
+  --create-namespace
+
+
+# 装完后确认 CRD 已注册:
+kubectl get crd | grep redisclusters    //应该看到 redisclusters.redis.redis.opstreelabs.in
+
+
+# 写一个 RedisCluster YAML(3 主 3 从，带持久化和打散)
+yaml
+apiVersion: redis.redis.opstreelabs.in/v1beta2
+kind: RedisCluster
+metadata:
+  name: redis-cluster
+  namespace: redis
+spec:
+  clusterSize: 3                          # 3 个分片(即 3 个 master，每个 master 自带 1 个 replica)
+  clusterVersion: v7
+  persistenceEnabled: true                # 开启持久化
+
+  kubernetesConfig:
+    image: quay.io/opstree/redis:v7.0.12
+    imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+  storage:                                # 数据持久化 PVC 模板
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+  redisLeader:
+    topologySpreadConstraints:            # 尽量把 leader 打散到不同节点
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            role: leader
+            clusterId: redis-cluster
+
+  redisFollower:
+    topologySpreadConstraints:            # follower 也打散
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            role: follower
+            clusterId: redis-cluster
+
+  podSecurityContext:
+    runAsUser: 1000
+    fsGroup: 1000
+
+# 几个关键字段的含义:
+# clusterSize: 3:表示 3 个分片，默认每个分片自带 1 个 replica，所以实际 Pod 数是 6 个(3 主 3 从)。
+# persistenceEnabled: true 配合 storage.volumeClaimTemplate:每个 Pod 都会拿到一个独立的 PVC，Redis 数据落盘。
+# topologySpreadConstraints:让 leader 和 follower 尽量分布到不同节点上，避免单节点故障打穿某个分片。
+
+
+
+# 应用并验证
+kubectl create namespace redis
+kubectl apply -f redis-cluster.yaml
+
+# 看 Operator 是否把 Pod 拉起来了
+kubectl get pods -n redis
+
+
+# 进入任意一个 leader Pod 验证集群状态
+kubectl exec -it redis-cluster-leader-0 -n redis -- redis-cli cluster info
+kubectl exec -it redis-cluster-leader-0 -n redis -- redis-cli cluster nodes
+cluster info 里如果看到 cluster_state:ok,就说明 Operator 已经完成了集群初始化、槽位分配和主从复制配置。
+
+一句话：这个 YAML 就是你对 Operator 下的“完整订单”：要几个分片、每个分片多大资源、数据放哪、怎么打散，剩下的 StatefulSet、Service、集群握手和槽位分配,Operator 全替你干完了。
+

@@ -1,0 +1,40 @@
+# HPA 配置示例
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# PodDisruptionBudget配置
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-app-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: my-app
+
+# selector 选中所有带 app: my-app 标签的 Pod。
+# minAvailable: 2 表示任何时候至少保留 2 个 Pod 可用。节点维护、drain 时，如果只剩 2 个，K8s 就不会再驱逐，保证服务不挂。
+# 如果副本数是 3，那最多只能驱逐 1 个。

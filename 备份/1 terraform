@@ -1,58 +1,38 @@
 # 基础概念
-> tf是什么？
-IaC 工具，用声明式配置管理云资源。
- 
+> tf是IaC 工具，用声明式配置管理云资源。
+> provider 用于和外部平台交互，比如 AWS、Azure、GCP。
+> resource是被Terraform 管理的具体对象，如 VM、VPC、Bucket。
+> data source读取已存在资源信息，不负责创建。
+> Terraform声明式，会自动算出需要创建、更新、删除的操作，不需要逐步写出“怎么执行”
+
 > Terraform 的工作流程是什么？
 init + plan + apply + destroy
 // init：初始化 backend、下载 provider、下载 module（源码）、检查依赖和插件版本（是否兼容）
+// 初始化 backend = 告诉 Terraform “state 在哪儿”，并建立好连接和锁
 // 当前代码配置、当前 state 文件、实际云资源状态
- 
-> 什么是 provider?
-Terraform 通过 provider 和外部平台交互，比如 AWS、Azure、GCP。
- 
-> 什么是 resource?
-被 Terraform 管理的具体对象，如 VM、VPC、Bucket。
- 
-> 什么是 data source?
-读取已存在资源信息，不负责创建。
-
- 
-> Terraform 是声明式还是命令式？
-声明式
-//tf会自动算出需要创建、更新、删除的操作，不需要逐步写出“怎么执行”
 
 
 核心文件与语法
 > main.tf、variables.tf、outputs.tf 有什么作用？
 main.tf: 资源定义
 variables.tf: 输入变量
-outputs.tf: 输出值
-// 通过output查看结果，给其他模块用，子模块把值输出出来,父模块拿来继续使用
+outputs.tf: 输出值， output输出结果，给其他模块用，子模块把值输出出来,父模块拿来继续使用
 
 
 > 变量有哪几种赋值方式？
-默认值
-terraform.tfvars
-*.auto.tfvars
-CLI -var
-环境变量 TF_VAR_xxx
-
+变量赋值从低到高就这几层：default 默认值 → TF_VAR_ 环境变量 → terraform.tfvars / *.auto.tfvars 文件 → 命令行 -var 或 -var-file，最后没给还会交互式提示。优先级后者覆盖前者。
 //terraform plan -var="region=ap-southeast-1" -var="instance_count=3"
  
 > locals 和 variable 的区别？
 variable 用于接收外部输入，实现配置的灵活性
 locals 用于模块内部，它根据逻辑处理去拼接变量，简化代码
  
-> output 有什么用？
-导出资源属性给人看或给其他模块引用
  
 
 
 # 状态管理
-> Terraform state 是什么？
+> Terraform state 作用？
 记录当前基础设施实际映射关系的状态文件。
- 
-> 为什么 terraform.tfstate 很重要？
 没有它，Terraform 不知道哪些资源已存在、需变更什么。
  
 > 本地 state 和远程 state 区别？
@@ -78,31 +58,31 @@ locals 用于模块内部，它根据逻辑处理去拼接变量，简化代码
 plan 检查
 refresh
 更新代码或重新导入资源
-
-// terraform refresh
 // terraform refresh同步 已管理资源状态	资源已在 state 中
 // terraform import	把现有资源纳入 state 资源不在 state 中
 
+> state中有，实际无，怎么处理
+# 1. 预览：state 会有什么变化（不实际修改）
+terraform plan -refresh-only
+# 2. 确认无误后，再同步 state
+terraform apply -refresh-only
+执行后，Terraform 会发现那个资源在云端已经不存在了，于是把它从 state 中移除。这样 state 和实际基础设施就重新对齐了。
 
 
 # 安全与最佳实践
 > 如何安全认证
 将凭证相关变量定义在 .tfvars，在 Provider 块引用该变量，完成云身份凭证注入。
 
-> 用 secrets manager、CI/CD secret、环境变量，避免硬编码。
+> 用 secrets manager、CI/CD secret（通过withCredentials注入环境变量中）、环境变量，避免硬编码。
  
 > 为什么不建议把凭据写进 .tf 文件？
 易泄露、难轮换、审计差。
  
 > Terraform 最佳实践有哪些？
-使用 module
-使用 remote tate
-开启 locking
-代码分层
-命名规范统一
-CI 跑 fmt / validate / plan
-
-
+- state file 放在远程后端 , 开启 locking
+- 使用 module
+- 代码分层，环境隔离，prod 的 state 和 dev 完全分开
+- CI 跑 fmt / validate / plan
 
 
 # 环境隔离
@@ -127,11 +107,9 @@ HCL 代码 = 施工图纸
  
 
 # 模块
-> 什么是 module？
-一组可复用 Terraform 配置。
- 
-> 为什么使用 module？
-复用、标准化、降低重复代码。
+> module作用？
+module是一组可复用 Terraform 配置。
+提供复用、标准化、降低重复代码。
  
 > root module 和 child module 区别？
 root 是执行入口
@@ -149,11 +127,13 @@ child 是被调用模块
  
 > 什么时候用 depends_on？
 隐式依赖不足时再用，别滥用。
- 
+
+
 > lifecycle 常见参数有哪些？
-create_before_destroy
+create_before_destroy   // 先建新的，再删旧的
 prevent_destroy
 ignore_changes
+
  
 > ignore_changes 的作用？
 忽略某些字段变更，避免不必要更新。
@@ -163,7 +143,7 @@ ignore_changes
 # 循环与条件
 > count 和 for_each 区别？
 count 适合简单数量
-for_each 适合按 key 管理对象，更稳定
+for_each 适合按 key 管理对象
  
 > 什么时候用 for_each 优于 count？
 资源有明确唯一标识时。
@@ -171,13 +151,22 @@ for_each 适合按 key 管理对象，更稳定
 > Terraform 支持条件创建吗？
 支持，可用 count 或 for_each 实现。
 //通常用 count 或 for_each 配合布尔变量/条件表达式来控制资源是否创建，比如 var.enable_x ? 1 : 0 或 var.enable_x ? { key = value } : {}。
- 
+ count = var.enable_monitoring ? 2 : 0
+ for_each = var.enable_monitoring ? {
+  cpu    = "CPUUtilization"
+  memory = "MemoryUtilization"
+  disk   = "DiskUtilization"
+} : {}          
+// 表示资源为ture，建3个
 
 
 # 导入与迁移
 > 如何把已存在资源纳入 Terraform 管理？
 用 terraform import
- 
+
+>> 什么情况下用
+资源已经存在，但不在 state 里，又想让 Terraform 接管它
+
 > import 后是否自动生成代码？
 通常不会，仍需手写/补齐配置。
 //import只是导入资源，配置需要补齐代码plan/apply
@@ -189,18 +178,14 @@ terraform state rm
 > 为什么要terraform state mv， 重新apply 可以？ 
 如果只是配置有差异，直接 apply 就可以；但如果资源地址、模块路径、资源名发生变化，Terraform 会认为这是“旧资源删了、新资源加了”。
 terraform state mv 的作用是把旧 state 记录迁移到新资源地址，避免误删重建，然后再执行 apply。
+// 改了资源在代码里的“地址”（名字、模块路径、count/for_each 形态），Terraform 就认不出是同一个资源，
+// 会误删重建。state mv 就是手动把 state 里的旧地址改成新地址，让 Terraform 重新对上号，避免误删。
+// terraform state mv aws_instance.web aws_instance.web_server
 
-
-> 处理 drift 先看是“state 多了”还是“state 少了”。
+> 处理 drift 先看是“state 多了”还是“state 少了”。   // 遇到过terraform问题
 如果真实资源少于 state，就用 terraform state rm 清理多余状态；
 如果真实资源多于 state，就用 terraform import 补回缺失的资源；
 最后再 plan 和 apply，确认最终与代码和真实环境一致。
-
-
-
-
-
-
 
 
 
@@ -216,8 +201,6 @@ plan 检查实际变更
 
 > 如何避免误删生产资源？
 prevent_destroy
-审批流程
-分离权限
 先 plan 再 apply
  
 > 如何在团队中落地 Terraform？
@@ -229,35 +212,36 @@ CI 自动 plan     //发现语法错误，fmt/validate
  
 
 
+
+
+
 面试官还常问：
-如何设计一套多环境 Terraform 目录结构？
+> 如何设计一套多环境 Terraform 目录结构？
 不同目录管理不同环境，比如说inputfile,有不同环境dev、prod
-如何管理 dev / uat / prod 的变量差异？
-如何处理多人同时改同一个 state？
-如何回滚一次错误的 apply？
+
+> 如何管理 dev / uat / prod 的变量差异？
+最常用的做法是给 dev、uat、prod 各建一个 .tfvars 文件，里面只写差异项（实例规格、副本数、数据库大小），代码本身完全复用。执行时用 -var-file 指定对应文件
+
+
+> 如何处理多人同时改同一个 state？
+靠远程后端 + 状态锁（State Locking）。把 state 放在 S3 这类远程后端里，执行 apply 时 Terraform 会自动抢锁。第二个人来改，锁已经被占了，操作直接阻塞，
+这样就避免了两人同时写 state 导致覆盖和资源丢失。   
+
+> Terraform 和 Ansible 的区别是什么？ (Citi)
+Terraform 从无到有建资源，Ansible 在已有机器上配环境。 实际常配合用：Terraform 建好机器，Ansible 再上去配置。
+
+> 如何回滚一次错误的 apply？
 找到上一个可用版本的代码,重新plan/apply
-如何导入已有云资源？
-如何做模块版本管理？
-Terraform 和 Ansible 的区别是什么？
-Terraform 和 CloudFormation / Deployment Manager / ARM / Bicep 有什么区别？
- 
 
-一个高频对比题
-面试准备建议，建议至少准备这 5 类答案：
-state 原理
-module 设计
-count vs for_each
-remote backend + locking
-实际项目里如何做多环境管理
+> 如何做模块版本管理？
+用github分支管理模块
 
+> Terraform 和 CloudFormation有什么区别？
+CloudFormation只管AWS, Terraform支持多云的资源管理
 
+> module 设计
+一个 module 只封装一类资源，输入用 variables 暴露必要参数,能够接收main传参，输出用 outputs 暴露关键 ID；这样才可复用、可维护。
 
-
-# 准备建议
-第一，state file是三家共同的底线。 HSBC问到了“state删了怎么办”和“团队协作怎么管”，Citi问到了“敏感数据存哪里”。准备时不要只背“state文件记录资源映射”，要能说清remote backend（S3/GCS + DynamoDB锁）、state锁定、state版本化、state恢复这一整套生产实践。
-第二，module是Citi明确问到的方向。 要能讲清楚module的输入输出、复用逻辑，以及在CI/CD流水线中怎么调module。
-第三，Terraform和Ansible的边界要能一句话说清。 Citi问了这个对比，答案的核心是：Terraform管provisioning（创建基础设施），Ansible管configuration（配置已有机器） 。
-第四，如果简历写了Terraform，SCB和Citi都会围绕“你在项目里怎么用的”追问细节。 准备一个2分钟能讲完的真实场景：用什么backend、state怎么管、module怎么拆、和CI/CD怎么集成、遇到过什么坑。
 
 
 # HSBC
@@ -266,6 +250,8 @@ state file 是 记录你写的代码和云上真实资源之间的映射关系�
 没有它，Terraform 不知道哪些资源已存在、需变更什么。
 这个账本里可能明文存着数据库密码、私钥这类敏感信息，必须用加密的远程后端（如 S3 + KMS）并开启状态锁，防止团队协作时把账本写坏或泄露。
 
+> state怎么管
+存在s3中，开启vesion
 
 > 怎么用state追踪资源?
 用 state 追踪资源，不是靠肉眼看 JSON，而是用 terraform state 系列命令来安全操作。
@@ -282,16 +268,17 @@ Object versioning 就是云存储的文件历史快照：每次写入或删除�
 用处是防误删、防写坏，出问题能一键回滚；对 Terraform 来说，就是给 state 文件上保险。
 
 
-
 > 团队协作中state怎么管
-- 用 S3 + DynamoDB 把 state 锁在远程后端里，保证同一时刻只有一个人能改 state，避免并发写坏。
+- 用 remote + State Locking 把 state 锁在远程后端里，保证同一时刻只有一个人能改 state，避免并发写坏。
 - 通过 PR评审 和 CI/CD 间接操作,比如apply，绝不手动碰它。
 
 // 变更走 PR，看 plan diff 不看 state 文件,
 // 生产环境的 apply 只从 CI/CD 跑，就是让 state 只从一个受控入口写，不让人手碰。   --避免用过期state
-。
 
-
+>> backend怎么管
+Backend 核心就三点：远程存 state、加锁防并发、按环境隔离。用 S3 存 state，开 `use_lockfile` 加锁，
+每个环境一个 key 或一个 bucket，backend 配置别硬编码，用 `-backend-config` 传参。这样 state 集中管理、多人安全、环境不串。
+// 每个环境一个 key? 同一个桶，三个 key
 
 # SCB
 > Terraform provisioning 有什么用
@@ -303,9 +290,6 @@ Terraform provisioning 是用代码定义基础设施。你写一份声明式的
 
 
 # Citi
-> Terraform 和 Ansible 的区别是什么？
-Terraform 从无到有建资源，Ansible 在已有机器上配环境。 实际常配合用：Terraform 建好机器，Ansible 再上去配置。
-
 > 怎么存敏感数据
 把tf敏感数据存在像GCP Secret Manager 这样的 密钥管理服务中
 
@@ -313,20 +297,11 @@ Terraform 从无到有建资源，Ansible 在已有机器上配环境。 实际�
 Terraform module 就是把一组资源打包成可复用的组件，像函数一样，传参就能用。
 作用是复用、标准化、少写重复代码，避免每套环境重新配一遍。
 
+>> cicd 中 怎么使用module
+就是在正确的目录里跑Terraform命令，
+流水线里只需要用 sh 步骤依次执行terraform apply 并指定varfile，Terraform自己就会去拉取并应用那些module
 
-
-
-
-
-
-
-
-
-
-
-
-
-//HSBC
+//HSBC项目
 > 部署过什么资源
 mig、scret、bucket、sql、bigquery
 
@@ -365,10 +340,6 @@ db： 关联instabce
 授权：对每个secretid，逐个授权给对应member
 
 
-
-
-
-
 6、怎么set mig
 instance_template、health_check、instance_group_manager、autoscaler、backend_service、forwarding_rule、dns
 ----------------------------------------------------
@@ -380,10 +351,6 @@ backend_service、           定义instance_group_manager，把前面的 MIG（I
 forwarding_rule             backend_service、subnetwork，  定义流量从指定子网（内网）进入后端服务
 dns                         用for_each遍历appname、IP，形成一份A记录列表，然后遍历列表生成DNS
 (! Client > Forwarding Rule > Backend Service > Instance Group / MIG > VM Instances)
-
-
-
-
 
 
 

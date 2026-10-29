@@ -7,6 +7,7 @@
 - 网络用 VPC-native，设 networking_mode = "VPC_NATIVE"，Pod IP 直接在 VPC 里路由。安全上节点用私有 IP，配 Cloud NAT 出网，再开 Workload Identity，让 K8s 的 ServiceAccount 安全地扮演 GCP 的 IAM。
 最后 terraform init、plan、apply，创建完用 gcloud container clusters get-credentials 拿凭证，kubectl get nodes 验证。
 
+有没有考虑过证书的过期问题？CA证书与组件的证书有效期是多久？怎么更新？
 
 > 怎么查k8s日志 (HSBC)
 - Cloud Logging，最全，适合历史查询、复杂分析和排查集群问题。控制台 Logs Explorer 按命名空间、Pod 名过滤。
@@ -14,8 +15,18 @@
 - GKE 控制台，点工作负载直接跳日志，适合快速定位。
 
 > 怎么减少云成本
+- 关掉空闲集群，谷歌发现十分之一的集群随时在空转；
+- 建立规模调整程序，用成本洞察和VPA，把过度配置的工作负载压下来；
+- 转 GKE Autopilot，按 Pod 请求计费，不为闲置基础设施买单，45% 的集群会更便宜。 
+- 容错型负载切到 Spot VM，成本直接省 60–90%
+
+
 > 怎么连GKE
-> 你遇到过什么问题
+- 安装 kubectl    // gcloud components install kubectl
+- 用 gcloud get-credentials 把目标集群的访问端点、证书和认证信息自动合并到本地的 ~/.kube/config 文件中
+gcloud container clusters get-credentials CLUSTER_NAME \
+  --location=LOCATION \
+  --project=PROJECT_ID
 
 # controller
 > K8s核心组件有哪些？各自作用？
@@ -92,7 +103,26 @@ nodeSelector、affinity、taints/tolerations
 分散部署，避免单点故障，也避免两个服务互相抢资源、互相干扰。
 
 
+> Node Affinity(节点亲和,灵活约束)
+硬约束:必须满足,否则调度失败
+软约束:优先调度到匹配节点,不满足也可调度
 
+> Taint(节点污点,节点侧排斥)
+节点级配置,主动排斥所有 Pod,无对应容忍则无法调度。
+
+> 给节点打污点格式:key=value:effect
+kubectl taint nodes node-1 dedicated=monitoring:NoSchedule
+
+> 三种污点效果(effect):
+NoSchedule:硬排斥,新 Pod 不能调度,已有 Pod 不受影响
+PreferNoSchedule:软排斥,尽量不调度,非强制
+NoExecute:硬排斥 + 驱逐,新 Pod 不能调度,已有 Pod 无对应容忍则被驱逐
+
+
+> Toleration
+Pod 级配置，声明可匹配对应污点，允许调度到污点节点。
+
+> Taint&Toleration 是节点维度的资源隔离,通常和亲和能力配合,实现专用节点池的精准调度
 
 
 
@@ -149,8 +179,8 @@ Deployment 支持 RollingUpdate（滚动更新，默认）和 Recreate（先删�
 发布模式常见：滚动发布、蓝绿发布、金丝雀发布、灰度发布。滚动最常用，蓝绿切流量快，金丝雀按比例放量。
 
 > 怎么保证发布不影响业务
-滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
-
+滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。
+就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
 
 
 17、如何在 GKE 发布应用？
@@ -166,6 +196,17 @@ Deployment 通过 RollingUpdate 策略逐步创建新版本 Pod，并在新 Pod 
 可以使用 kubectl rollout status 查看发布状态，使用 kubectl rollout history 查看历史版本，                        
 发现异常时通过 kubectl rollout undo 回滚到上一个或指定版本。生产环境还应配置合理的副本数、PDB、健康检查和不可变镜像版本。     //rollout undo
 
+>> 发布策略
+滚动发布：逐个替换旧实例，新旧共存，省资源，但回滚慢，版本会混杂。
+蓝绿发布：准备两套环境，蓝是旧、绿是新，测好一键切流量，回滚快，但资源翻倍。
+金丝雀发布：先切一小部分流量到新版本，验证没问题再逐步扩大，风险低。
+灰度发布：按用户特征分批放量，比如只给 1% 用户或特定地区，本质是金丝雀的精细化。
+
+>> 使用场景区别
+滚动发布适合日常无状态服务，资源省，但回滚慢；
+蓝绿适合大版本上线，要秒级回滚、资源充足；
+金丝雀适合新功能先小流量试，验证没问题再扩大；
+灰度适合按用户、地域分批放量，做精细化验证。
 
 
 
@@ -197,6 +238,14 @@ Service ClusterIP 通常来自单独的 Service secondary range。这样 Pod 可
 Pod 和 Service 从子网 secondary range 分配 IP，避免路由复杂度。
  
 
+> VPC-native 的优点是：
+- 网络路径更简单
+- Pod 可以直接访问 VPC 资源,比如连接 Cloud SQL、GCS、on-prem 等服务
+- 减少额外路由配置
+- 更容易结合 VPC 防火墙和 Cloud NAT
+
+
+
 7、Ingress 在 GKE 中有什么作用？
 统一暴露 HTTP/HTTPS 服务，常结合 Google Cloud Load Balancer。
  
@@ -212,9 +261,11 @@ LoadBalancer 会创建 Google Cloud 负载均衡器，适合生产环境对外�
 ExternalName 则通过 DNS 别名将 Service 指向集群外部的域名。 集群内访问外部第三方服务（数据库 / 外部 API）  //：ExternalName 就是让 Pod 用集群内的名字，访问集群外的域名。
 ! 对于生产环境的 HTTP/HTTPS 服务，通常会使用 Ingress，而不是为每个服务单独创建 LoadBalancer。
 
+
 > Ingress 和 Service 的关系
 外部用户 -> Google Cloud Load Balancer -> Ingress -> Service Pod
 Ingress 本身不直接选择 Pod，而是把流量转发给 Service，再由 Service 通过 selector 转发到 Pod。
+
 
 > 怎么配置ingress
 配置 Ingress 分三步：指定控制器、配路由规则、挂 TLS 证书。
@@ -223,14 +274,19 @@ Ingress 本身不直接选择 Pod，而是把流量转发给 Service，再由 Se
 第三步：配 TLS 证书（走 HTTPS 必须加）。 在 tls 字段里指定 hosts 域名、Secret，里面存 tls.crt 和 tls.key。
 
 
-
-
 > ingress 需要配置SSL证书吗
 需要，当客户端发起 HTTPS 请求时，Ingress 需要向客户端证明自己的身份，并完成 TLS 握手。证书就是身份的证明，私钥用于握手加密。如果不配证书，客户端无法建立安全连接
 
 > 怎么配置SSL
 通用做法是通过kubectl create secret 把证书存成 K8s 的 TLS Secret，然后在 Ingress 的 tls 字段里引用 secretName
 
+> 如何配置DNS api.example.com
+api.example.com 是企业自己的业务域名,需要在 DNS 服务商或 Cloud DNS 中配置 A 记录,将它解析到Ingress 创建的 Google Cloud Load Balancer 公网 IP;
+同时在 Ingress 的 spec.rules.host 中配置相同域名,Load Balancer 才能根据 Host 转发到对应 Service。
+
+> Ingress 跟 LoadBalancer 区别
+LoadBalancer Service 是四层，只按 IP 和端口把 TCP/UDP 流量直通给 Pod，简单直接，但每个 Service 通常要单独占一个 IP；
+Ingress 是七层，能看懂 HTTP 的 Host 和 Path，用一个入口把不同域名、路径分给不同 Service，还能顺带做 TLS 终止。
 
 
 > NetworkPolicy定义
@@ -277,7 +333,6 @@ ROX：多节点只读挂载，用来分发静态资源、配置、模型，不�
 减少：手工提前建、容量固定、人工匹配，无法按需 问题
 
 
-
 > 怎么配置StorageClass
 首先，写 YAML, 定义
 - provisioner：指定存储插件，比如 GKE 用 pd.csi.storage.gke.io。
@@ -287,6 +342,11 @@ ROX：多节点只读挂载，用来分发静态资源、配置、模型，不�
 最后，kubectl apply 创建。之后 PVC 里指定 storageClassName，就能自动创建 PV 了。要默认就加 default 注解。
 
 
+>> 其他
+GCE Persistent Disk 是 GKE 中常用的块存储，适合：数据库、单个 Pod 使用的持久化磁盘、StatefulSet
+Filestore 是 Google Cloud 提供的托管 NFS 文件存储，适合：多个 Pod 共享文件、需要 ReadWriteMany 的场景、共享配置、文件或数据目录
+存储关系：Pod -> PVC -> PV -> 云存储
+StorageClass 使集群能够根据 PVC的请求自动创建 PV,而无需管理员手动预先配置底层存储。
 
 
 # 探针类 & HPA & PodDisruptionBudget
@@ -300,9 +360,32 @@ HPA 根据 CPU、内存或业务指标调整 Pod 副本数；
 VPA 根据实际使用情况调整单个 Pod 的资源 requests 和 limits；
 Cluster Autoscaler 根据 Pod 是否能够调度来调整节点数量。通常由 HPA 应对业务流量变化，再由 Cluster Autoscaler 提供足够的节点资源。
 
-* 什么情况用vpa
-GKE 里 VPA 主要用于不能加副本、只能加资源的服务（数据库、有状态中间件），以及资源 requests 长期设不准、想省成本的场景。生产环境建议先用 Off 模式跑一周看建议，再决定是否开启自动调整。
-* 像MySQL 不能随便能多副本，多副本是“主从/集群副本”，不是“随便加几个 Pod 一起读写”。
+
+>> HPA定义
+HPA是 k8s 水平 Pod 自动扩缩容组件，根据自定义指标 比如cpu,自动调整工作负载的 Pod 副本数。
+
+>> HPA配置
+- 集群必须提前部署 metrics-server,否则无法获取资源指标,HPA 不生效
+- 定义scaleTargetRef、最大最小副本数, metrics,比如CPU/内存资源使用率
+apply之后,根据自定义指标自动调整工作负载的 Pod 副本数。
+
+>> HPA、Autoscaler关系
+业务负载增加 -> HPA 增加 Pod -> 节点资源不足 -> Cluster Autoscaler 增加节点
+
+>> 什么情况用vpa
+GKE 里 VPA 主要用于不能加副本、只能加资源的服务 比如数据库、有状态中间件，以及资源 requests 长期设不准、想省成本的场景。
+// 像MySQL 不能随便能多副本，造成几个 Pod 一起读写
+
+>> metrics-server定义
+HPA 控制器周期性从 metrics-server 获取 Pod 指标，对比目标阈值计算期望副本数，调用工作负载的 scale 接口调整副本数。
+
+>> metrics-server部署
+直接 apply 官方 components.yaml,一键创建所有关联资源
+
+
+>> pod 需要多少资源
+通过Prometheus 采集一周以上的运行数据，取高峰时段的 P95/P99 指标值，加上冗余后作为最终配
+
 
 
 > 怎么配置自定义指标
@@ -360,11 +443,6 @@ PodDisruptionBudget，简称 PDB，是 K8s 里用来限制自愿中断时，同�
 
 
 
-有没有考虑过证书的过期问题？CA证书与组件的证书有效期是多久？怎么更新？
-
-
-
-
 # 安全类
 19、GKE 如何做身份认证和权限控制？
 Kubernetes RBAC + Google IAM
@@ -375,8 +453,16 @@ Kubernetes RBAC + Google IAM
 [ 身份认证 -> Google IAM 检查 -> Kubernetes RBAC 检查 -> 执行 Kubernetes 操作 ]
 
 20、Workload Identity 是什么？
-让 Pod 使用 GCP Service Account 权限访问 GCP 资源，不必在 Pod 中放密钥。
+让 Pod 使用 GSA 权限访问 GCP 资源，不必在 Pod 中放密钥。   // Pod 中放密钥,存在泄密
  
+
+>> pod访问资源流程                                      //Pod 本身不保存长期 JSON 密钥，令牌也会自动刷新。
+  -> 使用 Kubernetes Service Account
+  -> GKE 验证并获取短期令牌
+  -> 以 Google Service Account 身份访问 GCP API
+  -> IAM 检查权限
+  -> 允许或拒绝访问
+    
 
 21、如何保护集群？
 - 保护生产级 GKE 集群，我会从多个层面入手：
@@ -415,77 +501,69 @@ Role 是命名空间级，ClusterRole 是集群级。
 
 
 # 排障类 
-## Pod 启动与异常状态
-> 如何排查 Pod 启动失败？
-- 排查 Pod 启动失败时，先用 kubectl get pod 确认状态，再用 kubectl describe pod 查看事件和容器状态，
-- 使用 kubectl logs 查看应用日志，必要时使用 --previous 查看上一次容器日志。
-- 然后依次检查镜像、资源调度、ConfigMap/Secret、权限、存储挂载和健康探针。
+> pending
+Pod 一直 Pending，排查入口统一用 kubectl describe pod 查看 Events，一般是资源够不够，PVC 没绑上，最后看调度规则配没配对。
+资源不够就扩节点或调低其他 Pod 的 requests；PVC 先 kubectl get pvc 看是不是一直 Pending；调度问题就检查nodeSelector、affinity、tolerations。
 
 
-> 如何排查 CrashLoopBackOff？
-该状态表示容器启动后立即退出，Kubelet 按指数退避机制不断重启。
-常见原因包括：
-排查时需结合kubectl logs --previous 查看容器日志和 kubectl describe pod 查看事件。
-应用启动命令错误、内存溢出（OOMKilled）、健康检查（探针）失败、配置文件错误、资源不足等。
+> CrashLoopBackOff
+CrashLoopBackOff 就是容器起来就挂、K8s 反复重启。我一般先 describe pod 看状态和事件，再 logs 看当前日志；如果已经重启过，加 --previous 看上一个崩溃实例的日志，
+常见原因就三类：应用本身报错、启动命令或参数写错、ConfigMap/Secret 缺字段或格式错。修复基本就是照日志定位，配置读取失败、数据库连不上、启动报错，改完就好。
 
 
-> Pod Pending 常见原因？
-Pod 处于 Pending 状态，一般说明还没有被成功调度到节点上，所以排查重点是在调度阶段。
-我一般会按以下步骤排查：   // 常见原因：资源不足、节点亲和性不满足、PVC未绑定、污点没容忍
-- 使用 kubectl describe pod 查看事件（Events），这里通常能看到调度失败的原因，比如资源不足、污点不匹配等；
-- 检查节点资源情况，比如 CPU、内存是否满足 request，可以通过 kubectl describe node 或 kubectl top node；
-- 检查是否有 taint/toleration、nodeSelector、亲和性等调度限制；
-- PVC 是否绑定成功，因为存储问题也会导致 Pending；
-如果以上都没有问题，才会进一步看 scheduler 或 kubelet 的日志做更深入排查。
+> ImagePullBackOff
+ImagePullBackOff 就是镜像拉不下来。我一般先 `describe pod` 看 Events，常见原因：镜像名或标签写错、私有仓库没配imagePullSecrets、网络连不到 registry、镜像确实不存在。
+定位时先手动 docker pull试一下能不能拉到镜像，私有仓库就建 docker-registry Secret 并在 Pod spec 里引用。
 
 
-> ImagePullBackOff怎么处理
-Pod 会卡在 ImagePullBackOff 或 ErrImagePull。kubelet 反复拉镜像失败，Pod 一直 Pending。
-处理：kubectl describe pod 看事件，确认镜像名、tag、仓库权限、网络和 imagePullSecret。
+
+> OOMKilled
+OOMKilled 就是容器内存超过 limits.memory 被杀掉了，Pod 会突然消失。排查先 describe pod 看 Last State 里的终止原因，有 metrics-server 再用 kubectl top pod 看历史曲线。
+修复分三层：短期 把 limits.memory 调高一些，中期 用VPA让它自动根据历史使用情况调整，长期 查代码里的内存泄漏。
 
 
-> Pod OOM 原因
-就是容器内存超过 limit，被 cgroup OOMKilled。常见：内存泄漏、流量突增、limit 设太小、JVM 堆外内存没算、缓存太大。
-解决：调大 limit、查泄漏、加监控。
+> Readiness/Liveness Probe failed
+K8s 觉得它死了反复重启。最常见原因就是 initialDelaySeconds 设太短，应用还没启动完就开始探，或者探测路径写错、探测超时时间太短，第一次请求慢就被判失败。
+稳健配法是 liveness 给足启动时间，比如 initialDelaySeconds: 30s 给应用启动留时间
+periodSeconds: 10、timeoutSeconds: 3，避免探测超时时间太短
+failureThreshold: 3 失败重启3次；
 
-> 主机资源够但调度不了
-常见原因：节点有 taint 没容忍；亲和/反亲和不满足；
-节点被 cordon 禁止调度；Pod 资源 request 太大，
-虽然总量够但单节点放不下；还有 PDB、拓扑分布约束、端口冲突。
 
->> k8s 污点跟cordon关系
-cordon 是操作，taint 是机制；cordon 本质就是给节点打一个特定的不可调度污点。
-cordon 是 taint 的特例/封装；drain 才是 cordon 之后再驱逐 Pod。
+> NotReady
+Node NotReady 就是节点本身出问题了，上面 Pod 一个个异常，新调度过去的全 Pending。
+我一般先 kubectl get nodes 确认状态，再 describe node 看 Conditions 定位原因。
+常见四类：kubelet 挂了或卡住、磁盘满了把 /var/lib/docker 撑爆、节点内存耗尽连 kubelet 都没资源跑、网络分区，节点和控制平面断了
+修复先 SSH 到节点上看看资源：df -h、free -m、top，磁盘满就清镜像，kubelet 挂了 查状态和日志 systemctl status kubelet 和 journalctl -u kubelet。最后预防上，节点磁盘超 80% 就告警，别等 Pod 出问题才反应。
 
+
+> Evicted
+Evicted 就是 Pod 被节点主动赶走了，describe 看 Status 里 Reason 写着 Evicted 就确认了。
+最常见原因是节点磁盘压力，K8s 的 eviction 机制在磁盘使用率超阈值时会驱逐 Pod 保节点。
+排查：先 describe pod 看 Reason是否Evicted，再 describe node 看 DiskPressure 是否 True。
+修复短期清节点磁盘、删无用镜像和日志，长期加监控告警，压力高时用 descheduler 主动迁移 Pod。
 
 
 ## 网络与服务不可达
 > Service 不通怎么排查？
-Service 不通，我会沿着流量链路从后端往前查。先确认 Pod 是否 Running、Ready，Service 的 selector 是否匹配，以及 EndpointSlice 里有没有后端；
-再核对 Service 的 port、targetPort，从集群内测试 Service DNS 和端口。若这些正常，再查 NetworkPolicy、集群网络和 GKE 数据面；如果是外部访问，
-再检查 Ingress 或 Load Balancer 的后端健康状态和防火墙规则。这样可以逐层判断问题是在 Pod、Service 还是入口网络。
+Service 访问不通，按四步排查：
+先看 Endpoints 空不空，空了就是 selector 没匹配上，对比 Pod 标签和 Service selector；
+再看 targetPort 对不对，连不上就是 targetPort 和 containerPort 不一致；
+然后看 Pod 是不是 Ready，没就绪不会进 Endpoints，查 readinessProbe；
+最后看 kube-proxy 正常不正常，Service IP 完全不通就查节点上的 kube-proxy。从里到外，一层层缩小范围。
 
 
 > Ingress 不生效怎么排查？
-Ingress 不生效，我会从后端往入口查。先确认 Pod 是 Ready，Service 的 selector 和端口正确，EndpointSlice 里有后端，并从集群内测试 Service。
-然后看 kubectl describe ingress 的 Events 和地址，核对 IngressClass、域名、路径和 TLS 配置。GKE 上再检查 Load Balancer 是否创建成功、后端健康检查是否通过，
-最后确认 DNS 是否指向正确的 IP。这样能区分问题是在应用、Service、Ingress 配置还是负载均衡入口。
+Ingress 报 502/503，先 describe ingress 看后端配置对不对；
+再看 Ingress controller 日志，connection refused 说明后端 Pod 没起来，upstream timed out 说明后端响应慢；  //kubectl logs -n ingress-nginx <ingress-controller-pod> | tail -30
+最后确认引用的 Service 存在且有 Endpoints。就按配置、日志、后端三层往下查。
 
 
-## 节点故障
-> 节点 NotReady 常见原因？
-GKE 节点 NotReady，我一般分三步查：
-- 先看范围，kubectl get nodes。如果一批节点同时挂，先怀疑控制面、CNI 或证书；如果就一两个，就上节点查。
-- 然后 kubectl describe node 看 Conditions，判断是内存、磁盘压力，还是 Ready False。
-- 最后 SSH 进去，systemctl status kubelet、journalctl -u kubelet 看日志，常见就是 kubelet 挂了、证书过期或运行时异常。
-
-一句话总结：先定范围，再看状态，最后查 kubelet 日志。
-
-> 节点 NotReady 排查和影响，单个节点挂了会导致整个集群异常吗？节点失联多久后上面pod会调度走？
-单节点故障通常不会拖垮整个集群，但会影响该节点上的 Pod；如果剩余容量不够，业务也会受影响。
-Kubernetes 默认通常要几分钟才会驱逐并重建 Pod，具体时间受配置影响；
-
-
+> k8s遇到过什么问题
+我遇到过GKE节点NotReady的问题。现象是节点状态显示NotReady，Pod无法调度，新Pod全部Pending。
+排查第一步，先确认节点状态和原因，用kubectl get nodes -o wide看节点状态，再用kubectl describe node查看Conditions和Events，发现是kubelet没向控制平面正常上报状态。
+第二步，进一步看kubelet日志和资源指标，排查是资源耗尽还是网络问题。第三步，用Cloud Monitoring确认节点CPU和内存，发现是内存压力过大。
+解决办法分两步：短期给节点池扩容，同时调整Pod的resource requests和limits，避免超额分配；长期配了PodDisruptionBudget和HPA，防止节点被过度压缩。
+整个排查思路就是：先看节点状态，再查kubelet日志，最后用Cloud Monitoring定位资源瓶颈，短期扩容、长期调资源配HPA。
 
 > 一个线上服务突然变慢，你一般怎么排查？
 我一般会按照“自上而下”的思路来排查，先从现象入手，再逐层定位问题。
@@ -496,53 +574,6 @@ Kubernetes 默认通常要几分钟才会驱逐并重建 Pod，具体时间受�
 - 如果以上都没有明显问题，会进一步结合日志进行分析，或者做链路追踪来定位具体瓶颈点。
 整体思路是：监控 → 应用 → 依赖 → 基础设施，逐层收敛问题范围。
 
-
-
-
-
-
-> limit 和 request 区别，内存满和 CPU 满有什么影响
-request 是调度依据，保证最低资源；limit 是上限，超了会限制。
-CPU 超 limit 被 throttle，变慢但不杀；
-内存超 limit 直接 OOMKilled，Pod 重启。CPU 是可压缩资源，内存不可压缩。
-
-
-> 资源不足又不能加节点
-“我会先确认是实际容量不足，还是 requests 设得过高、调度约束导致资源浪费。短期优先保核心业务：
-暂停批任务和非必要发布，缩减非核心副本，
-再依据监控调整过量的 requests。
-不会盲目压低核心服务资源；同时排查节点池上限、云配额和 Pod IP 是否卡住扩容。”
-
-
-> Pod 一直 Terminating 死不掉
-pod 一直 Terminating，我会先看 describe pod 和 Events，判断是 finalizer、进程没响应 SIGTERM、存储卸载，还是节点失联。
-先处理根因，确认业务和数据安全后再考虑强制删除；特别是有状态 Pod，不能直接 force delete，以免旧进程还在写数据。节点故障时再结合 GKE 节点状态和相关日志排查。
-
-// kubectl describe pod <Pod名> -n <命名空间> 会显示 Pod 详情和 Events（事件），通常能看到删除卡在哪一步。
-// finalizer 是删除前必须完成的清理标记；清理控制器没完成工作，Pod 就会一直留在 Terminating。
-// 删除时 Kubernetes 会给容器发 SIGTERM，让程序优雅退出；如果进程没响应或卡住，等待宽限期后可能仍无法正常结束。
-// 如果 Pod 挂载了磁盘，节点或存储插件没能卸载卷，也会导致删除卡住。
-
-> 100 个 Pod 都 crash 会不会疯狂重启？
-会。默认 restartPolicy 是 Always，kubelet 会按指数退避重启，10s、20s、40s，最多 5 分钟，进入 CrashLoopBackOff。但如果 100 个同时崩，它们会各自退避重启，集群压力确实大，尤其拉镜像、起容器、写事件都频繁。
-
-
-> 补救措施
-核心是别让它们无脑重启。
-· 用 Job 跑批任务，设 backoffLimit，超了就不再重启。
-· 长期服务设合理的 liveness 探针，别太快失败。        //Kubernetes 会重启容器；如果探针超时太短、失败次数太少，服务只是启动慢或短暂繁忙，也可能被反复重启
-· 加 startupProbe 保护慢启动。
-· 用 PodDisruptionBudget 保最小可用，但不防崩溃。
-· 最关键：监控告警 + 自动熔断。比如 Prometheus 检测到同一 Deployment 短时间内大量崩溃，触发告警，甚至用 Operator 暂停滚动更新或缩容到 0，等人工介入。
-· 应用层做好健康检查，别一启动就崩。
-
-
-> k8s遇到过什么问题
-我遇到过GKE节点NotReady的问题。现象是节点状态显示NotReady，Pod无法调度，新Pod全部Pending。
-排查第一步，先确认节点状态和原因，用kubectl get nodes -o wide看节点状态，再用kubectl describe node查看Conditions和Events，发现是kubelet没向控制平面正常上报状态。
-第二步，进一步看kubelet日志和资源指标，排查是资源耗尽还是网络问题。第三步，用Cloud Monitoring确认节点CPU和内存，发现是内存压力过大。
-解决办法分两步：短期给节点池扩容，同时调整Pod的resource requests和limits，避免超额分配；长期配了PodDisruptionBudget和HPA，防止节点被过度压缩。
-整个排查思路就是：先看节点状态，再查kubelet日志，最后用Cloud Monitoring定位资源瓶颈，短期扩容、长期调资源配HPA。
 
 
 
@@ -559,13 +590,6 @@ pod 一直 Terminating，我会先看 describe pod 和 Events，判断是 finali
 - 使用 Spot 实例：对非实时、可中断的批处理任务使用 Spot 实例，大幅降低计算成本。
 - 使用 Autopilot 模式：如果是无状态服务，直接上 Autopilot，按 Pod 实际请求计费
 - 定时开关gke集群
-
-
-
-
-
-
-
 
 面试时常会追问这几个：
 Autopilot vs Standard
@@ -622,8 +646,6 @@ Standard 模式：用户需要自行管理 Worker 节点（创建、扩缩容、
 
 
 
-
-
 # 设计
 > 300+ Pod、每天 50+ 发布，怎么设计集群  //设计
 我会先按业务的 CPU、内存 requests 和压测结果做容量规划，不会只按 300 个 Pod 直接估节点数。集群选托管的多可用区方案，
@@ -650,7 +672,7 @@ Standard 模式：用户需要自行管理 Worker 节点（创建、扩缩容、
 
 > 如果一个 K8s 集群挂了怎么办？你们的应急方案是什么？
 如果 GKE 集群出故障，我会先判断是控制面、节点网络，还是应用本身的问题，同时确认业务影响范围。处理原则是先保业务，再恢复集群。
-如果只是控制面暂时不可用，我会先确认现有 Pod 和入口流量是否还正常，不盲目重启；GKE 的控制面由 Google 管理，我会结合监控和 Google Cloud 状态排查。联系gcp support
+如果只是控制面暂时不可用，我会联系联系gcp support处理，因为GKE 的控制面由 Google 管理
 如果业务已经受影响，就按预案把流量切到备用集群，并确认数据库切换不会造成数据不一致。
 随后修复或重建集群，通过 IaC 和 Backup for GKE 恢复工作负载，恢复后先验证关键 Pod、Service、存储、数据库和核心业务，再逐步切回流量。
 平时要做好跨 zone 部署、备份和灾备演练，并明确恢复时间和数据恢复目标。
@@ -733,9 +755,9 @@ Docker 是“把应用装进盒子”的，把代码和依赖打包成镜像，�
 
 > 请解释 Helm 的三大核心概念（Chart、Release、Repository）分别是什么？
 “Helm 有三个核心概念。
-**Chart** 是应用的部署包，里面有 Kubernetes 资源模板和默认配置；
-**Release** 是 Chart 安装到集群后生成的一次部署实例，同一个 Chart 可以用不同名称或配置安装多次；
-**Repository** 是存放和分发 Chart 的仓库。简单类比：Chart 是安装包，Release 是安装后的实例，Repository 是下载这些安装包的地方。”
+Chart 是应用的部署包，里面有 Kubernetes 资源模板和默认配置；
+Release 是 Chart 安装到集群后生成的一次部署实例，同一个 Chart 可以用不同名称或配置安装多次；
+Repository 是存放和分发 Chart 的仓库。简单类比：Chart 是安装包，Release 是安装后的实例，Repository 是下载这些安装包的地方。”
 
 
 > 请描述 Helm 的工作原理（Helm 是如何将 Chart 部署到 Kubernetes 集群的）？

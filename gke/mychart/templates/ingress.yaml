@@ -1,0 +1,88 @@
+# 这个 Deployment 的 Pod 都带有 app: my-app 标签，后面两个 Service 靠这个标签选中它们。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: app
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+---
+# 创建service，暴露Deployment的Pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  type: ClusterIP          # 默认类型，集群内部可达
+  selector:
+    app: my-app            # 关键：匹配 Deployment 的 Pod 标签
+  ports:
+    - name: http
+      port: 80             # Service 自身监听的端口
+      targetPort: 80       # 转发到 Pod 容器的端口
+---
+# 创建ingress，/api 走 API 服务，/web 走前端服务
+# kubectl create secret tls cafe-secret --key tls.key --cert tls.crt，创建 TLS Secret，在 Ingress 中引用 Secret
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app-ingress
+spec:
+  ingressClassName: gce
+  tls:                                   # 新增：TLS 配置
+    - hosts:
+        - myapp.example.com             # 必须与下面 rules 里的 host 一致
+      secretName: my-app-tls            # 指向刚创建的 Secret
+  rules:
+  - host: my-app.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+        port:
+          number: 8080
+      - path: /web
+        pathType: Prefix
+        backend:
+          service:
+            name: web-service
+            port:
+              number: 80
+---
+# NetworkPolicy 配置示例
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 8080
+
+# 含义是：只有带有 app: frontend 标签的 Pod,才能访问后端 Pod 的 8080 端口。
+# Ingress: 控制进入 Pod 的流量、Egress: 控制 Pod 发出的流量

@@ -1,0 +1,29 @@
+
+# 给 Kubernetes Service Account 指定 GSA:
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: app-sa@project-id.iam.gserviceaccount.com
+
+
+
+
+
+# Deployment 使用这个 KSA:
+# spec:
+#   template:
+#     spec:
+#       serviceAccountName: app-sa
+
+
+# 还需要配置 IAM 绑定，允许该 KSA 使用 GSA:serviceAccount:app-sa@project-id.iam.gserviceaccount.com
+# 并授予 GSA 访问目标资源所需的 IAM Role。
+
+
+
+
+
+

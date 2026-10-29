@@ -1,10 +1,7 @@
 聚集核心，给口语化，30s之内 的面试回答, 前后要有逻辑
 用最直白话表达
 给我devops岗位，关于sql这部分的面经，不要题库，不要编造，要互联网能找到的真实经历
-要互联网能找到的回答，不要编造
 生产环境推荐做法
-
-
 汇丰、渣打、花旗
 
 
@@ -19,23 +16,17 @@
 · 如何优化CI/CD流水线构建时间 （Citi）
 · 敏感数据在Terraform和CI/CD pipeline中如何存储等。 （Citi）
 
-
 六、云平台与基础设施
 · 解释AWS中ECS和EC2的区别 （AIA）
-
 
 
 十、行为 / 项目 / 开场
 · 自我介绍 （Citi）
 · Explain the project in detail     ——候选人的项目恰好是“a cloud-based platform for managing and deploying applications”，“The platform uses Kubernetes for container orchestration”。 （SCB）
 
-
-
 容量、高可用、存储
 - 无状态服务不依赖本地数据?
 - 数据库优先用云托管服务?
-
-
 
 # 待解决问题
 Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
@@ -50,12 +41,11 @@ Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
 
 
 
-# kibana
-Operator 有什么用，用途？
 聚集核心，给口语化，20s之内 的面试回答, 前后要有逻辑
 聚集核心，给口语化，30s之内 的面试回答 描述上面的过程, 前后要有逻辑
+要互联网能找到的来源，聚集核心，给口语化，20s之内 的面试回答, 前后要有逻辑
 
 
 
-汇丰渣打 怎么部署 redis ?
-不要编造，要互联网能找到的来源
+推荐怎么备份cloudsql
+聚集核心，给口语化，20s之内 的面试回答, 前后要有逻辑
