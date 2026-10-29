@@ -135,4 +135,4 @@ CI 做 --check --diff 预演   //检查变化，显示差异
 一是用 copy 模块把 CA、apiserver、kube-proxy 的证书和 key 分发到各节点，权限设 600；
 二是轮换时用 kubeadm certs renew 或 openssl 重新签发，然后滚动重启 kubelet 和 kube-proxy。kube-proxy 证书一般由 kubeadm 生成，
 也可以走 DaemonSet 自动挂载。核心就是：证书统一由 CA 签，Playbook 负责分发和轮换，权限收紧。
-总结：20-30 台，Ansible 批量管；幂等靠模块和条件判断；证书用 kubeadm 管理，Playbook 分发和轮换。
+总结：20-30 台，Ansible 批量管；幂等靠模块和条件判断；证书用 kubeadm 管理，Playbook 分发和轮换。 
