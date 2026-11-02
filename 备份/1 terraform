@@ -365,6 +365,15 @@ IAM、vpc、subnet、sa、firewall
 安全管理
 Secret Manager & kms
 vpc\route\subnet
+
+> 解释AWS中ECS和EC2的区别（AIA）
+EC2是给你一台VM，ECS是帮你跑容器的编排服务。
+想全控底层、省成本，选EC2；想专注跑容器、少管节点，选ECS
+
+> 数据库优先用云托管服务?
+是，无DB运维经验，不是专职的DBA，最好用cloudsql,可以failover、rezional
+
+> Explain the project in detail
  
 
 sql
@@ -374,6 +383,22 @@ GRANT USAGE, CREATE ON SCHEMA public TO "dds‑airflow‑gce‑uat‑sa@hsbc‑1
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "dds‑airflow‑gce‑uat‑sa@hsbc‑11505776‑ddsasquat‑dev.iam";
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "dds‑airflow‑gce‑uat‑sa@hsbc‑11505776‑ddsasquat‑dev.iam";
  
+> 遇到过什么问题
+同VPC、同子网的两台VM，突然ping不通了。
+ 先查路由表确认下一跳没问题，再看防火墙有没有显式放行入站流量。如果没有，补一条允许规则就好了
 vm与sql instance不在同一个vpc，导致vm连不上sql
 防火墙标签打错，导致health流量进不去vm
 secret过期，导致连不上url
+
+
+# 关系
+VPC 是圈地，Subnet 是盖楼，vm是房间，Route 是修路标，Firewall 是配保安。数据出门先看路标（怎么走），到门口再看保安（让不让进）。
+
+# 怎么配合
+当一个数据包要从 VM-A 发到 VM-B 时，GCP 会按这个顺序处理：
+第一步：Route 先指路
+系统先查路由表，看“目的地 VM-B 的 IP 属于哪个网段，下一跳应该往哪走”。这一步只决定“往哪走”，不管让不让走。
+第二步：Firewall 再放行
+路指好之后，数据包到达目的地。这时防火墙检查规则：“这个来源 IP、这个协议、这个端口，允许通过吗？”允许才放行，不允许就直接丢弃。
+一句话总结：Route 负责“怎么去”，Firewall 负责“让不让去”。 路由错了，数据包根本找不到目的地；防火墙拦了，数据包到了门口也进不去。
+

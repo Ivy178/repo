@@ -1,9 +1,11 @@
 # 其他
 > 介绍下Redis
-Redis是一个开源、基于内存的 Key-Value 数据库, 最常被当作缓存，也常用于消息队列、分布式锁、排行榜等场景。
+Redis 是 Key-Value 的 NoSQL 数据库，数据放内存，读写速度快，所以常用来做热点缓存、防频繁刷接口；它还支持持久化，宕机重启能恢复数据。
 
-> Redis常用的数据结构
-String用于缓存，Hash用于对象，List用于队列，set用于去重，ZSet用于排行榜
+> 为什么使用redis
+因为 Redis 是内存数据库，快、能扛高并发。主要用来做缓存，把热点数据放内存里，减少数据库压力、提升响应速度；
+另外还能做分布式锁、会话、计数器这些场景，所以用它。
+
 
 > 你的项目是怎么用redis
 我项目里 Redis 主要用在三块：
@@ -12,15 +14,19 @@ String用于缓存，Hash用于对象，List用于队列，set用于去重，ZSe
 第三，接口限流，用 Redis 计数器。核心就是扛读、控并发、保护 MySQL。
 
 
-> 秒杀流程
-面试官，Redis 秒杀核心就三步：Redis 扣库存、MQ 削峰、异步下单。
-1. 前端和网关先限流、防重、验证码。
-2. 服务端用 Redis + Lua 原子扣库存。Lua 里判断库存，够就减，不够直接返回“抢完”，防超卖。
-3. 扣成功就发 MQ，立刻返回“排队中”。
-4. 消费者从 MQ 拿消息，幂等校验，创建订单，扣 DB 库存。
-5. 支付超时，回补 Redis 和 DB 库存。
-关键点：Redis 扛并发，Lua 保原子，MQ 削峰，DB 最终一致。防重复下单用唯一索引或分布式锁。
-总结一句：Redis 预扣库存，MQ 异步落单，超时回补，最终一致。
+> Redis 和 MySQL 的区别？
+Redis 是内存 Key-Value 非关系型，MySQL 是磁盘关系型。实际一般 MySQL 负责持久化，Redis 缓存热点数据；
+读请求先查 Redis，没命中再查 MySQL 并回写 Redis，这样能减少数据库压力、提升性能。
+
+> 谈谈Redis和MySQL是如何搭配使用的
+MySQL 做持久化主库，Redis 做缓存扛读。
+读的时候先查 Redis，命中就返回；没命中查 MySQL，再回写 Redis 并设过期。
+写的时候先更新 MySQL，再删 Redis，保证最终一致。
+
+> Redis常用的数据结构
+String用于缓存，Hash用于对象，List用于队列，set用于去重，ZSet用于排行榜
+
+
 
 
 
@@ -31,12 +37,32 @@ RDB 是定期生成某个时间点的内存快照，文件小、恢复快，但�
 AOF 记录 Redis 的写命令，数据丢失窗口更小，但文件较大，恢复和重写成本更高。
 纯缓存通常使用 RDB 或不启用持久化，重要数据通常使用 AOF，生产环境也可以同时开启两者，并将备份保存到外部存储、定期验证恢复能力。
 
+
+> 持久化策略
+用redis混合持久化，AOF 重写时，前半截直接写一份 RDB 快照（恢复时秒级加载），后半截把重写期间的增量命令按 AOF 追加（不丢数据）。
+就是前半截拍快照，后半截记流水账，恢复时既快又全
+
+
 > RDB/AOF 配置
 RDB：在 redis.conf 里设 save 规则，比如 save 900 1、save 300 10，满足条件自动快照。手动触发用 BGSAVE。  // save <秒数> <修改次数>。
 AOF：把 appendonly 改成 yes 开启。刷盘策略选 appendfsync everysec，每秒刷一次，最多丢1秒，生产推荐。
 再配 auto-aof-rewrite-percentage 100 和 min-size 64mb 自动重写，防止文件膨胀。
 生产建议：两个都开，用混合持久化 aof-use-rdb-preamble yes，AOF 保数据安全，RDB 方便快速恢复。
 一句话：RDB 设 save 规则，AOF 开 everysec，生产混合持久化。
+
+> RDB 和 AOF 区别？高可用怎么做？
+RDB 是内存快照，AOF 是写命令日志；4.0 后推荐混合持久化。高可用三层：主从（读扩展）、哨兵（自动选主）、Cluster（按 slot 分片）
+
+
+# 其他
+> 淘汰策略
+缓存场景常用 allkeys-lru 或 allkeys-lfu
+优先使用 allkeys-lru 策略。充分利用 LRU 算法的优势，把最近最常访问的数据留在缓存中
+allkeys-lfu：所有 key 中淘汰最近最不常用
+
+> redis 先删除缓存，还是先修改数据库？
+别反过来。先删缓存再改库，中间有空窗期，别的请求可能把旧数据又读回缓存，导致缓存和库对不上。
+先改库再删缓存，脏数据窗口更小；要更稳就加延迟双删或删缓存失败重试。
 
 
 
@@ -57,25 +83,23 @@ AOF：把 appendonly 改成 yes 开启。刷盘策略选 appendfsync everysec，
 解决: 过期时间加随机值，别同一时间失效；Redis 做主从+哨兵/集群高可用；加本地缓存和限流降级；提前缓存预热，持久化快速恢复。
 
 
-
 # 故障
-> 怎么处理BigKey
-就是单个 key 太大，比如 String 值特别大，或者 Hash、List、Set、ZSet 元素特别多。
-危害是操作会阻塞 Redis 主线程，网络传输大，删除慢，持久化也慢，集群里还会数据倾斜。
-排查用 redis-cli --bigkeys 或 --memkeys，也可以采样扫 RDB。
-处理就拆分，比如 Hash 分桶、List 分段；删除用 UNLINK 异步删；压缩 value；设过期；别让大 key 长期留着。
+> 怎么处理BigKey/HotKey
+BigKey 就是单个 key 的 value 太大。危害是 Redis 单线程处理它时会阻塞，导致网络、内存压力大
+HotKey，就是某个 key 访问量特别高，把单个分片或节点 CPU 打满。
 
-> 怎么处理 HotKey
-就是某个 key 访问量特别高，把单个分片或节点 CPU 打满。
-排查用 redis-cli --hotkeys，需要 LFU 策略；也可以业务埋点、Proxy 统计，或者短时间 monitor 采样。
-处理就加本地缓存、多级缓存；给 key 加随机后缀拆成多个副本，分散到不同节点；读写分离；限流；集群分散压力。 
+> BigKey/HotKey怎么处理？
+排查用 redis-cli --hotkeys；
+大 key 业务拆分、UNLINK 异步删、高峰不动低峰处理；热 key 加本地缓存挡读、拆多副本 key 打散到多个 slot, 合理淘汰策略。
+
 
 > Redis变慢了，你怎么排查？
-- 先定位范围：用 redis-cli --latency 看延迟，slowlog get 看慢查询，先分清是客户端、网络，还是 Redis 本身慢。
-- 查大 key 和热 key：用 --bigkeys、--hotkeys。大 key 会阻塞主线程，热 key 会把单核打满，这俩最常见。
-- 看资源：CPU 是不是单核 100%，内存够不够，有没有用 swap，网络带宽和延迟高不高。Redis 单线程，单核满就是瓶颈。
-- 看持久化：RDB fork、AOF fsync 都会阻塞主线程。如果慢的时间点跟持久化重合，就调策略，比如放从库做持久化。
-- 看主从和集群：主从延迟、同步、集群负载不均，都会让部分请求变慢。
+Redis 变慢我一般按这个顺序排：先看延迟和 slowlog 判断是客户端、网络还是 Redis 本身；
+再查大 key、热 key，这俩最常见；
+然后看 CPU 是不是单核打满、内存和 swap；
+接着看 RDB fork、AOF fsync 有没有卡主线程；
+最后再查主从延迟和集群负载不均。
+
 
 
 # 高可用就行
@@ -87,9 +111,11 @@ Redis 高可用通常有三种方式：主从复制、Sentinel 和 Redis Cluster
 - Redis Cluster 通过 hash slot 将数据分布到多个 Master，并为 Master 配置 Replica，同时解决水平扩展和故障转移问题。
 生产环境还需要结合持久化、外部备份、监控和恢复演练。
 
+> Sentinel跟cluster区别
+单机能装下、只求别挂就选哨兵；单机装不下、要扩容量和写能力就上 Cluster。
 
 > Redis 集群哈希槽
-Redis Cluster 把数据分成 16384 个槽，每个 key 用 CRC16 算完对 16384 取模，落到某个槽，每个节点负责一部分槽。客户端根据槽找节点，槽可以迁移，支持扩缩容。
+Redis Cluster 把数据分成 16384 个槽，每个节点负责一部分槽。
 请求的 key 不在当前节点，会返回 MOVED 重定向。核心就是分片和路由。
 
 > 主从切换数据丢了怎么办
@@ -113,28 +139,21 @@ Redis Cluster 把数据分成 16384 个槽，每个 key 用 CRC16 算完对 1638
 3 节点和 4 节点都只能容忍 1 个节点宕机，但 4 节点多花一台机器的钱，容错能力却没变。所以奇数是在同样容错能力下最省资源的选择。
 
 
-# 分布式锁
+# 基础功能
 > 分布式锁是什么
-- 分布式锁就是在分布式环境下，多个服务实例抢同一个资源时，保证同一时刻只有一个能操作。核心就俩字：互斥。
-- 比如防止重复下单、库存超卖、定时任务重复跑。单机用 synchronized 就行，但服务多实例了，本地锁锁不住，就得用分布式锁。  //应用
-- SET key value NX PX 过期时间 加锁，value 用唯一 ID；释放时用 Lua 脚本判断是不是自己的锁再删，保证原子。生产直接用 Redisson，带看门狗自动续期，支持可重入。  //实现最常用，核心是原子加锁、防死锁、防误删。
+分布式锁就是多个服务或线程抢同一个资源时，保证同一时刻只有一个能操作。比如用 Redis 的 `SET NX PX`，谁抢到锁谁执行，执行完释放。
+作用：防并发冲突、防重复操作。
+用途：重复下单、重复支付、库存扣减、定时任务防重复跑、缓存击穿时只让一个请求去重建缓存。
+
+> 会话作用
+会话就是服务器记住“你是谁”的状态数据。用户登录后生成一个 session id，存到 Redis，后续请求带着它，
+服务器就能识别用户，不用每次重新登录。用途主要是保持登录状态、存购物车
 
 
 # 监控
 监控指标有哪些？
 监控告警，重点看内存、连接数、QPS、命中率、慢查询、主从延迟和持久化状态，提前发现大 key、热 key；
 
-
-
-# 简历上
-负责 redis 集群主从搭建、分片扩容、slot 迁移
-
-
-
-> 谈谈Redis和MySQL是如何搭配使用的
-MySQL 做持久化主库，Redis 做缓存扛读。
-读的时候先查 Redis，命中就返回；没命中查 MySQL，再回写 Redis 并设过期。
-写的时候先更新 MySQL，再删 Redis，保证最终一致。
 
 > Redis的双写一致性问题怎么解决？
 双写一致性没法强一致，只能最终一致。常用方案是 Cache Aside：先更新数据库，再删除缓存，而不是更新缓存。
@@ -146,3 +165,73 @@ MySQL 做持久化主库，Redis 做缓存扛读。
 这种超长字符串，我一般不会硬塞进 MySQL。
 先看长度，如果连 LONGTEXT 都放不下，就存到对象存储，比如 S3，数据库只存 URL 或 key
 
+
+# 简历上
+负责 redis 集群主从搭建、分片扩容、slot 迁移
+
+
+# redis操作
+## 初始化集群（3主3从示例）
+redis-cli --cluster create \
+  10.0.1.11:6379 10.0.1.12:6379 10.0.1.13:6379 \
+  10.0.1.21:6379 10.0.1.22:6379 10.0.1.23:6379 \
+  --cluster-replicas 1 \
+  --cluster-yes
+
+
+## 槽位管理与迁移（reshard）
+# 查看集群槽位分布
+redis-cli --cluster check 10.0.1.11:6379
+
+# 重新分片（指定源和目标节点）
+redis-cli --cluster reshard 10.0.1.11:6379 \
+  --cluster-from <source-node-id> \
+  --cluster-to <target-node-id> \
+  --cluster-slots 1024 \
+  --cluster-yes
+
+# 平衡各节点槽位（自动均分）
+redis-cli --cluster rebalance 10.0.1.11:6379 \
+  --cluster-use-empty-masters
+
+
+
+> 主从复制配置
+主要设置repl-backlog-size，设置越大，从节点断线重连后，同步差异的成功率越高
+repl-timeout 60 主节点判定从节点下线的时间阈值（秒）
+
+> Sentinel
+负责监控主从节点健康状态、自动执行主从切换、并向客户端推送新的主节点地址（告诉客户端从新节点写入）
+
+> RDB、AOF配置
+RDB主要设置save，比如save 300 10，300秒内至少10次写操作，立即保存
+AOF主要设置appendfsync，比如设置everysec，每秒刷一次，最多丢失 1 秒数据，性能损失可接受。
+
+> 怎么建集群
+用cluster create创建集群，如果指定6个节点的IP、replicas为1，就会创建3主3从集群
+
+> 怎么迁移槽位
+用check查看有多少槽位
+用reshard分配槽位
+用rebalance做微调，平衡槽位数量
+
+> 能直接用rebalance?
+不能，新节点刚加入集群时是 0 个槽，默认会被 rebalance 直接忽略, 分配不到槽位，所以不能直接rebalance
+
+
+> Operator
+Operator做了什么StatefulSet只管Pod死活，不懂Redis集群拓扑。扩分片时它只负责拉起新Pod，至于CLUSTER MEET、槽位迁移、主从分配——一概不管。
+Operator把运维经验编码成软件，替你干了所有重复劳动。
+
+> 关系
+CRD 是声明，Operator 是执行者
+
+> operator 部署
+第一步把 Operator 装进去（通常用 Helm），它会把 CRD 和控制器一起注册好。
+第二步写一个 RedisCluster 资源 apply 上去，声明你要几个分片、多大资源、要不要持久化。Operator 监听到这个声明后，就会自动把 StatefulSet、Service 和集群拓扑全部拉起来，不需要你手写底层 YAML。
+
+> operator版本：OT-CONTAINER-KIT
+
+> 如果发现 CRD 没注册？
+直接 apply 官方提供的 CRD 清单即可
+kubectl apply -f https://raw.githubusercontent.com/OT-CONTAINER-KIT/redis-operator/main/deploy/crds/redis.opstree.dev_redis_crd.yaml

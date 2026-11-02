@@ -47,10 +47,13 @@ Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式�
 
 
 
-# 部署 Prometheus Stack
-> 如何部署Prometheus Stack
-- 添加helm仓库并更新,它集成了 Prometheus、Grafana、Alertmanager 以及各类 Exporter。
-- 用helm repo list 验证是否添加成功
+
+> 安装prometheus
+部署 Prometheus 就用 kube-prometheus-stack 这个 Helm Chart，
+添加helm仓库、建namespace、helm install安装，Prometheus、Alertmanager、Grafana 就全起来了。
+之后监控目标不用手写配置，用 ServiceMonitor 选 Service，指定需要监控的服务，Operator 自动发现；
+用PrometheusRule定义告警；
+最后 Grafana 导入看板可视化。Operator 自动生效。
 
 
 > 配置StorageClass
@@ -82,10 +85,8 @@ inhibit_rules 做告警抑制，避免重复轰炸。
 
 
 > 配置prometheus规则
-- 配置 PrometheusRule，就是在spec.groups 里定义规则组，
-- 每条规则写 alert 告警名、expr PromQL表达式、for 持续时间，再加 labels 和 annotations。
-- metadata 上打对 label，匹配prometheus release 名称
-- 用kubectl get prometheusrules查看是否生效
+在group里放规则，在rules里写告警条件、在for添加持续时间，防抖动、
+在annotations填告警描述 ，Operator 自动加载生效
 
 
 > 怎么查询/PromQL
@@ -113,5 +114,7 @@ PromQL 查询我一般按“选指标—算速率—做聚合—出结果”来�
 - 怎么和日志/链路怎么配合
 回答中提到将日志发送到集中存储（ELK/Elasticsearch、Splunk或Grafana Loki + 对象存储），并配置轮转和保留策略。
 指标看现象，日志查根因
+
+
 
 

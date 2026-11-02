@@ -62,3 +62,33 @@ spec:
 # Toleration 只是“允许”,不是“吸引”。Pod 能容忍污点,不代表一定会去那个节点；要确保它真的去,还得靠 nodeSelector 或 nodeAffinity 把它“拉”过去。只写 toleration 不写亲和,调度器可能还是选别的节点。
 # nodeSelector 和 nodeAffinity.required 是“与”关系,两者必须同时满足。如果标签设计冲突,Pod 会一直 Pending。
 # podAntiAffinity 用 preferred 更安全。如果写成 requiredDuringScheduling,当节点数不够打散时,Pod 会直接调度失败卡住；生产上通常用 preferred + 足够副本数来兼顾可用性。
+
+---
+# 把pod分散到不同节点上,避免单点故障
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:   # 硬性要求
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - my-app
+              topologyKey: kubernetes.io/hostname          # 以“节点”为拓扑域
+      containers:
+        - name: my-app
+          image: myapp:1.0

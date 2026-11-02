@@ -1,0 +1,13 @@
+1.添加 Helm 仓库：
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+2.创建监控命名空间：
+kubectl create namespace monitoring
+
+3.安装 Prometheus-Operator：
+helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack -n monitoring
+安装完成后，Prometheus、Alertmanager 和 Grafana 都会作为独立的 Kubernetes 资源运行在监控命名空间中。
+
+
+ServiceMonitor 是 Prometheus-Operator 提供的 CRD，用于指定需要监控的服务

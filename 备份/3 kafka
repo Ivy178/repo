@@ -28,7 +28,8 @@ Consumer: 调大fetch.min.bytes 和 fetch.max.wait.ms,  提高吞吐量
 // 比如副本数 3、min.insync.replicas=2、acks=all：leader 要等 ISR 里至少 2 个副本确认才返回成功；如果只剩 leader 一个可用，写入直接失败
 
 
-> Rebalance 就是消费者组重新分活儿：有消费者加入、退出或分区数变了，Kafka 就把分区收回来重新分配。分配期间大家暂停消费，没提交 offset 的消息可能被重复消费，所以消费端要做幂等。
+> Rebalance 就是消费者组重新分活儿：有消费者加入、退出或分区数变了，Kafka 就把分区收回来重新分配。
+分配期间大家暂停消费，积压更严重，没提交 offset 的消息可能被重复消费，所以消费端要做幂等。
 > ！Lag 就是消费者还欠着多少条消息没消费。
 
 

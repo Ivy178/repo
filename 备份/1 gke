@@ -11,7 +11,7 @@
 
 > 怎么查k8s日志 (HSBC)
 - Cloud Logging，最全，适合历史查询、复杂分析和排查集群问题。控制台 Logs Explorer 按命名空间、Pod 名过滤。
-- kubectl logs，最快，适合实时看单个 Pod。kubectl logs -f pod名 看实时，--previous 看崩溃前日志。
+- kubectl logs，最快，适合实时看单个 Pod。-f 看实时，--previous 看崩溃前日志。
 - GKE 控制台，点工作负载直接跳日志，适合快速定位。
 
 > 怎么减少云成本
@@ -46,7 +46,9 @@ gcloud container clusters get-credentials CLUSTER_NAME \
 
 # containerd
 > Docker 和 K8s的核心区别?
-Docker 是单机容器化工具，管单个容器；K8s 是集群编排平台，管一大群容器，负责调度、扩缩、自愈、服务发现、滚动更新。Docker 造容器跑容器，K8s 管集群编排容器。
+Docker 是容器运行时，解决“怎么把应用打包成容器、在单机上跑起来”；
+K8s 是容器编排平台，解决“怎么在集群里管理成百上千个容器，做调度、扩缩容、自愈和负载均衡”。
+一句话：Docker 管一个容器，K8s 管一群容器。
 
 > 差别和能否构建
 Docker 是完整工具链，containerd 是底层运行时，Docker 底层也调它。containerd 本身不构建镜像，但可以用 nerdctl + BuildKit 替代，命令跟 docker 几乎一样。
@@ -58,11 +60,14 @@ Docker 是完整工具链，containerd 是底层运行时，Docker 底层也调�
 - kubectl提交请求给apiserver
 - apiserver写入etcd
 - controller-manager 建 Pod
-- scheduler调度，绑定Pod到节点
+- scheduler计算适合的节点，绑定Pod到节点
 - kubelet调 containerd 拉镜像起容器
 - kube-proxy 更新 iptables/ipvs 规则 → Service 流量转发到 Pod
 - controller-manager持续监控状态
  
+>> iptables? kube-proxy 监听 Service 和 Endpoints 变化，把“谁该接流量”翻译成 iptables/IPVS 规则写进内核，规则一变，流量就跟着走。 就像邮局分拣员，收件人名单一变，他就更新分拣表。
+
+
 > Scheduler 是根据什么来决定 Pod 调度到哪个节点的 (HSBC)
 干这事的是 kube-scheduler。
 它先看哪些节点能满足 Pod 的要求，比如资源够不够、污点能不能忍、亲和性满不满足，这叫 Filter 过滤；
@@ -88,7 +93,7 @@ nodeSelector、affinity、taints/tolerations
 > 使用过K8s的调度策略（如nodeSelector、affinity、taints/tolerations等） （HSBC）
 给节点贴标签，Pod 挑标签。比如节点贴了 ssd，Pod 写 nodeSelector: disktype=ssd，它就只去有 ssd 标签的节点。没这样的节点，Pod 就一直 Pending。
 作用：让特定 Pod 跑在指定机器上。
-解决：我想让某个服务只跑某类节点，比如 GPU 任务只跑 GPU 机器。
+用途：我想让某个服务只跑某类节点，比如 GPU 任务只跑 GPU 机器。
 
 
 > taints/tolerations
@@ -101,6 +106,7 @@ nodeSelector、affinity、taints/tolerations
 > Kubernetes中反亲和什么？” ——考察PodAntiAffinity，即如何让Pod尽量分散到不同节点。 （Citi）
 反亲和就是：别把 Pod 都放一起，尽量分开。比如你有 3 个副本，反亲和让它们分到 3 台机器上。这样坏一台，只挂一个；要是全挤一台，一挂全挂。
 分散部署，避免单点故障，也避免两个服务互相抢资源、互相干扰。
+// 用podAntiAffinity可以分散Pod到不同节点
 
 
 > Node Affinity(节点亲和,灵活约束)
@@ -110,7 +116,7 @@ nodeSelector、affinity、taints/tolerations
 > Taint(节点污点,节点侧排斥)
 节点级配置,主动排斥所有 Pod,无对应容忍则无法调度。
 
-> 给节点打污点格式:key=value:effect
+> 给节点打污点格式:key=value:effect                                    ???
 kubectl taint nodes node-1 dedicated=monitoring:NoSchedule
 
 > 三种污点效果(effect):
@@ -121,6 +127,10 @@ NoExecute:硬排斥 + 驱逐,新 Pod 不能调度,已有 Pod 无对应容忍则�
 
 > Toleration
 Pod 级配置，声明可匹配对应污点，允许调度到污点节点。
+
+> 同时给同一个 key=value 打上 NoSchedule 和 NoExecute 两种污点
+这是运维中最常见的做法，目的是先阻止新Pod进入，再逐步“请走”旧Pod，而不是粗暴地一次性驱逐所有Pod，给业务留出缓冲时间。
+
 
 > Taint&Toleration 是节点维度的资源隔离,通常和亲和能力配合,实现专用节点池的精准调度
 
@@ -137,8 +147,9 @@ Pod：最小部署单元
 Deployment：管理 Pod 副本和滚动更新
 
 > Pod 在 K8s 中的角色
-Pod 是最小调度单位，一个 Pod 可以有一个或多个容器，共享网络和存储。
-它是 K8s 里创建和管理的最小单元，所有控制器最终都是管 Pod。
+Pod 是 K8s 里最小的调度和运行单元，把一个或多个紧密协作的容器包在一起，共享网络和存储。应用真正跑在 Pod 里，
+Deployment、StatefulSet 这些控制器通过管理 Pod 副本，来保证可用性和扩缩容。
+
 
 > Pod 启动前修改参数用什么方式
 用 init 容器，它在主容器启动前跑，可以做初始化配置、改配置文件、等依赖就绪。
@@ -160,10 +171,13 @@ DaemonSet：确保在集群的每个节点上运行一个 Pod 副本，适用于
 > Pod、Deployment、Service 关系
 Deployment 管 Pod 副本和更新，Pod 是实际运行的容器组，Service 给 Pod 提供稳定访问入口和负载均衡。Pod IP 会变，Service 不变，通过标签选择器关联。
 
-> 多容器情况
-常见三种：Sidecar 辅助主容器，比如日志采集、代理；
-Init 容器 启动前初始化；
-Ambassador/Adapter 做网络代理或协议转换。最常用的是 Sidecar 和 Init。
+> k8s无状态服务不依赖本地数据?
+对，但不是“不用数据”，而是不把数据绑在 Pod 本地。业务状态外置到数据库、Redis、对象存储，
+所以 Pod 随便杀、随便扩，重建也不丢东西。
+
+> 多容器情况                        
+最常用 sidecar 模式：主容器干活，旁边挂个日志收集、代理或监控容器帮忙；
+还有 init 容器做启动前初始化。比如等等数据库就绪
 
 14、节点池有什么用？
 - GKE 节点池是一组配置相同的节点。通过多个节点池，可以按 workload 分组，使用不同的机器类型、标签、污点和自动伸缩策略。
@@ -182,19 +196,14 @@ Deployment 支持 RollingUpdate（滚动更新，默认）和 Recreate（先删�
 滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。
 就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
 
-
-17、如何在 GKE 发布应用？
-通常是 Deployment + Service + Ingress/LoadBalancer。
-在 GKE 发布应用，通常使用 Deployment 创建和管理 Pod，使用 Service 提供稳定的内部访问地址，再根据访问需求选择 Ingress 或 LoadBalancer 对外暴露。
-发布流程一般是构建并推送镜像，然后更新 Deployment，通过滚动更新发布新版本，
-最后检查 Pod、Service、Ingress 和业务健康状态。
-生产环境还应配置 Readiness Probe、资源限制、副本数、PDB 和回滚策略。
-
+>> maxUnavailable，maxSurge 用于滚动更新
+>> maxUnavailable: 0 + maxSurge: 1，意思是“一个都不许少，先多起一个新的，等就绪再慢慢换”。
 
 18、滚动更新和回滚怎么做？
 Deployment 通过 RollingUpdate 策略逐步创建新版本 Pod，并在新 Pod 通过 Readiness Probe 后再删除旧 Pod，从而减少服务中断。   //rolling update
-可以使用 kubectl rollout status 查看发布状态，使用 kubectl rollout history 查看历史版本，                        
-发现异常时通过 kubectl rollout undo 回滚到上一个或指定版本。生产环境还应配置合理的副本数、PDB、健康检查和不可变镜像版本。     //rollout undo
+查看可回滚的历史版本,helm history <RELEASE_NAME> -n <NAMESPACE>
+回滚到上一个版本,helm rollback <RELEASE_NAME> -n <NAMESPACE>
+
 
 >> 发布策略
 滚动发布：逐个替换旧实例，新旧共存，省资源，但回滚慢，版本会混杂。
@@ -219,7 +228,14 @@ Secret 存敏感信息，比如密码、token、证书。
 Secret 默认只是 base64 编码，不是加密，生产要开 etcd 加密或 KMS。
 
 > ConfigMap 可以被修改吗
-可以。挂载成卷的话，Pod 里的文件会自动更新，但有延迟；用环境变量注入的不会更新，得重启 Pod。subPath 挂载也不会自动更新。一般配合 reloader 或滚动重启让配置生效。
+可以改，kubectl edit 或 apply 都行。但注意两点：改了不会自动让已运行 Pod 生效，环境变量注入的要重启 Pod，挂载卷的可能延迟同步；
+另外如果设了 immutable: true，就不能改，只能删了重建。
+
+>> 环境变量注入的要重启? 环境变量是启动时“抄”进去的，ConfigMap 改了它不会重抄，必须重启 Pod 让它重新抄一遍。
+
+>> 环境变量注入 与 挂载卷 区别
+环境变量改完要重启，挂载卷改完自动同步；简单键值用环境变量，配置文件用挂载卷。
+
 
 > ConfigMap 和 Secret怎么配置
 配置就是写 YAML：ConfigMap 用 data 存键值，Secret 用 stringData 或 data（base64）存键值，
@@ -245,14 +261,15 @@ Pod 和 Service 从子网 secondary range 分配 IP，避免路由复杂度。
 - 更容易结合 VPC 防火墙和 Cloud NAT
 
 
-
 7、Ingress 在 GKE 中有什么作用？
 统一暴露 HTTP/HTTPS 服务，常结合 Google Cloud Load Balancer。
  
 > k8s中service是什么 （HSBC）
-Service 就是给一组 Pod 起个固定名字和固定 IP，流量自动分给它们。Pod 的 IP 会变，ervice 会统一访问地址。
+Service 就是给一组 Pod 起个固定名字和固定 IP，流量自动分给它们。Pod 的 IP 会变，service 会统一访问地址。
 它靠标签选 Pod，自动做load Balance，还能服务发现。Pod 挂了、新加了，它自动更新，你完全无感。
 解决啥？ Pod IP 不稳定、服务找不到、流量不知道发给谁。
+
+>> 服务发现就是“按名字找人”，人换了地址，名字不变，系统自动帮你找到
 
 8、GKE 中 Service 类型有哪些？
 ClusterIP 用于集群内部访问； 适用于后端微服务之间互相调用
@@ -270,7 +287,7 @@ Ingress 本身不直接选择 Pod，而是把流量转发给 Service，再由 Se
 > 怎么配置ingress
 配置 Ingress 分三步：指定控制器、配路由规则、挂 TLS 证书。
 第一步：指定 Ingress Controller。 控制器才知道这个 Ingress 归它管。   //GKE 默认 Controller 可以不加这个字段
-第二步：配路由规则。 核心是 rules，定义 host 域名和 paths 路径，把不同路径指向对应的后端 Service 和端口。
+第二步：配路由规则。 在rules定义 host 域名和 paths 路径，把不同路径指向对应的后端 Service 和端口。
 第三步：配 TLS 证书（走 HTTPS 必须加）。 在 tls 字段里指定 hosts 域名、Secret，里面存 tls.crt 和 tls.key。
 
 
@@ -284,10 +301,17 @@ Ingress 本身不直接选择 Pod，而是把流量转发给 Service，再由 Se
 api.example.com 是企业自己的业务域名,需要在 DNS 服务商或 Cloud DNS 中配置 A 记录,将它解析到Ingress 创建的 Google Cloud Load Balancer 公网 IP;
 同时在 Ingress 的 spec.rules.host 中配置相同域名,Load Balancer 才能根据 Host 转发到对应 Service。
 
+
 > Ingress 跟 LoadBalancer 区别
 LoadBalancer Service 是四层，只按 IP 和端口把 TCP/UDP 流量直通给 Pod，简单直接，但每个 Service 通常要单独占一个 IP；
 Ingress 是七层，能看懂 HTTP 的 Host 和 Path，用一个入口把不同域名、路径分给不同 Service，还能顺带做 TLS 终止。
 
+>> 需要多少个IP
+LoadBalancer Service：每个 Service 想要外网访问，就得单独给它一个 LB IP，10 个服务就是 10 个 IP。
+Ingress：对外只暴露一个入口 IP
+
+>> LoadBalancer 跟 Ingress配合
+LoadBalancer Service 负责“打开大门”，让流量能进来；Ingress Controller 负责“在门内指路”，根据域名和路径把流量送到正确的应用。 两者配合，就实现了用一个公网 IP 入口，支撑多个后端服务的七层流量治理。
 
 > NetworkPolicy定义
 NetworkPolicy就是K8s里的Pod防火墙，用来做网络隔离，控制 Pod 之间以及 Pod 与外部网络之间的流量
@@ -308,10 +332,10 @@ K8s默认网络是“全通”的，任何Pod都能访问任何Pod，很不安�
 
 
 > k8s产品里面是基于哪些技术实现资源隔离需求的
-维度              底层技术                                                k8s中体现
-多租户逻辑隔离     namespace + RBAC + ResourceQuota                       命名空间、配额、权限边界
-节点/调度隔离      taints/tolerations、affinity、nodeSelector             把不同业务调度到不同节点
-网络隔离           network namespace、veth、bridge、iptables/eBPF、CNI    Pod IP、Service、NetworkPolicy
+K8s隔离资源分三层：
+逻辑层：用 namespace + RBAC + ResourceQuota 做租户、权限和配额边界；
+节点层：用 taints/tolerations、affinity、nodeSelector 把不同业务分到不同节点；
+网络层：用 network namespace、CNI 和 NetworkPolicy 隔离 Pod 间流量。
 
 
 
@@ -319,14 +343,16 @@ K8s默认网络是“全通”的，任何Pod都能访问任何Pod，很不安�
 
 # 存储类
 > PV、PVC 和 StorageClass 的关系是什么？
-PV是集群中的实际存储资源（由管理员提供），PVC是用户对存储资源的请求（声明所需大小和访问模式），
-两者绑定后 Pod 即可挂载使用。StorageClass是动态供给的模板，当用户创建 PVC 时，
-系统会根据 StorageClass 自动创建 PV，实现存储的按需分配
+PV 是实际那块存储，PVC 是用户“我要多大、什么类型”的申请，StorageClass 是“按什么模板自动创建 PV”的说明书。
+PVC 提需求，StorageClass 根据需求自动创建 PV，实现存储的按需分配
+造好后 PV 和 PVC 绑定，Pod 再挂 PVC 用。
+
 
 > RWO vs RWX vs ROX 访问模式
 RWO：单节点读写，最常用，适合数据库这类单实例有状态服务；同节点多个 Pod 可以一起挂载，但不能跨节点。
 RWX：多节点同时读写，一般是文件存储，适合多 Pod 共享读写目录，需要业务处理并发写。
 ROX：多节点只读挂载，用来分发静态资源、配置、模型，不能写。
+
 
 > StorageClass跟pv区别
 一句话：手动 PV 是“先建好一堆固定大小的盘子，等用户来挑”，挑不到就卡住；StorageClass 是“用户要多大，自动做多大”，所以能按需分配。
@@ -337,9 +363,10 @@ ROX：多节点只读挂载，用来分发静态资源、配置、模型，不�
 首先，写 YAML, 定义
 - provisioner：指定存储插件，比如 GKE 用 pd.csi.storage.gke.io。
 - parameters：传磁盘类型，比如 type: pd-ssd。
-- reclaimPolicy：删 PVC 后卷怎么处理，Delete 自动删，Retain 保留数据。
-- volumeBindingMode：推荐 WaitForFirstConsumer，等 Pod 调度后再创建卷，避免绑错可用区。
-最后，kubectl apply 创建。之后 PVC 里指定 storageClassName，就能自动创建 PV 了。要默认就加 default 注解。
+- reclaimPolicy 设 Retain 防误删数据
+- volumeBindingMode 设 WaitForFirstConsumer 等 Pod 调度后再创建卷
+- allowVolumeExpansion 设 true
+创建后，PVC 引用这个 StorageClass，K8s 就会自动按需动态创建 PV 并绑定，不用手动预先准备存储
 
 
 >> 其他
