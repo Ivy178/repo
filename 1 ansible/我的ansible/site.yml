@@ -1,0 +1,64 @@
+# nginx.yml
+- hosts: web
+  become: yes
+  serial: [1, "20%", "100%"]
+  max_fail_percentage: 5
+
+  vars:
+    manual_confirm: true   # CI 里设 false 跳过人工确认
+
+  tasks:
+    - name: 安装 nginx
+      yum:
+        name: nginx
+        state: present
+
+    - name: 备份并下发配置
+      copy:
+        src: ./nginx.conf
+        dest: /etc/nginx/nginx.conf
+        backup: yes
+        validate: "nginx -t -c %s"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload nginx
+
+    - name: 启动并开机自启
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags: retry_third
+
+    # 强制先把 handler 跑完（reload 生效），再做健康检查
+    - name: 刷新 handlers,让 reload 立即生效
+      meta: flush_handlers
+
+    - name: 健康检查
+      uri:
+        url: "http://127.0.0.1/"
+        status_code: 200
+      retries: 3
+      delay: 5
+      register: health
+      until: health.status == 200
+
+    - name: 等待人工确认再继续下一批
+      pause:
+        prompt: "当前批次 {{ ansible_play_batch }} 已完成，检查没问题按回车继续，有问题 Ctrl+C 中止"
+      when: manual_confirm | bool
+
+  handlers:
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded
+
+
+
+# 正常渐进式执行
+# ansible-playbook site.yml
+
+# 只重试之前失败的机器
+# ansible-playbook site.yml --limit @site.retry

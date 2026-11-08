@@ -1,0 +1,53 @@
+- hosts: web
+  become: yes
+  vars:
+    config_backup: "/etc/nginx/nginx.conf.bak"
+  tasks:
+    - name: 备份旧配置
+      copy:
+        src: /etc/nginx/nginx.conf
+        dest: "{{ config_backup }}"
+        remote_src: yes
+      ignore_errors: yes          # 首次部署可能没旧配置，不报错
+
+    - block:
+        - name: 拷贝新配置
+          copy:
+            src: nginx.conf
+            dest: /etc/nginx/nginx.conf
+
+        - name: 校验配置语法
+          shell: nginx -t
+          register: nginx_test
+          failed_when: nginx_test.rc != 0    # 返回码非0就算失败
+
+        - name: 重载 nginx
+          service:
+            name: nginx
+            state: reloaded
+
+        - name: 验证服务健康
+          uri:
+            url: http://localhost/healthz
+            status_code: 200
+          register: health_check
+          retries: 3
+          delay: 5
+          until: health_check.status == 200
+
+      rescue:
+        - name: 回滚配置
+          copy:
+            src: "{{ config_backup }}"
+            dest: /etc/nginx/nginx.conf
+            remote_src: yes
+          when: config_backup is exists
+
+        - name: 回滚后重载
+          service:
+            name: nginx
+            state: reloaded
+
+        - name: 标记回滚完成
+          fail:
+            msg: "部署失败，已回滚到旧配置"

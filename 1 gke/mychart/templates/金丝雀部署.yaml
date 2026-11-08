@@ -1,0 +1,41 @@
+# 主 Ingress：承接剩余流量，指向 stable
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp-stable
+                port: { number: 80 }
+---
+# 金丝雀 Ingress：拿走 10% 流量给 canary
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-canary
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp-canary
+                port: { number: 80 }
+
+
+# 放量就是改 canary-weight 的值（10 → 30 → 50 → 100），每次改完观察指标，正常就继续上调，异常就删掉金丝雀 Ingress 回滚。

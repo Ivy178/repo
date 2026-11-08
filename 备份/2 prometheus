@@ -1,59 +1,111 @@
+# 架构与整体设计（4）
+> 说一下你之前公司的Prometheus监控流程/架构
+通过Exporter采集K8s集群内外的MySQL、Redis指标 → K8s内做服务发现自动监控新上线的Pod → Prometheus周期性拉取并存入TSDB → PromQL对接Grafana和Alertmanager，做可视化与处理告警。
+另外短任务再用 Pushgateway 补
 
-# 项目介绍
+
+> Prometheus的实现思路是什么？和你的项目有什么区别？
+Prometheus 核心思路就是“拉、存、查、告”：通过服务发现找到目标，周期性 HTTP 拉取 `/metrics`，按“指标名+标签”存成本地时序库 TSDB，
+再用 PromQL 查询和算告警规则，最后交给 Alertmanager 发告警。默认 pull 模型，简单可靠。
+
+
+> 为什么用pull模型
+用 pull 是因为采集频率和并发由 Prometheus 控制，目标挂了 up 直接能看出来；
+新机器靠服务发现自动加，新机器靠服务发现自动加
+
+> Grafana核心特点：
+Grafana 核心就是统一可视化平台：能接 Prometheus、ES、Loki 等多数据源，同屏看指标、日志和链路；
+图表丰富，支持变量做动态仪表盘；还能配统一告警并推到钉钉、企微。核心就是：多源统一、展示灵活、告警协作。
+
+
+
+# 采集与 Exporter（4）
 > 监控指标
 集群状态: Deployment 副本数、HPA、PVC容量、Pending Pod
 应用(业务)：QPS、P99延迟、错误率、自定义业务指标
 容器(Pod)：CPU/内存使用、OOMKilled、重启次数、容器状态
 基础设施(Node): CPU·内存·磁盘·网络IO·节点Ready
 
-> 监控来源
-Node - node-exporter
-Pod / Container - cAdvisor（kubelet 内置）
-业务服务 - 应用 /metrics 端点
-集群 - kube-state-metrics
+> Prometheus的监控数据采集原理是什么？如何处理海量时序数据？
+采集是 pull 模型：服务发现拿目标，按周期拉 /metrics，解析后按“指标名+标签”写进 TSDB。
+海量时序数据靠 TSDB 按时间分块、压缩、标签倒排索引，只存样本；再通过分片、联邦或远程存储扩展。
 
-> 监控怎么配合
-Prometheus 负责“采集和存储”监控数据，Grafana 负责“可视化”这些数据。
-
-> 架构
-主动从targets 拉取指标，通过 PromQL查询，Grafana 可视化，Alertmanager 告警
-
-> Prometheus主要组件：
-Prometheus Server：负责数据抓取、存储和查询。
-Exporters：暴露指标，比如 MySQL、Redis、Nginx    --采集
-Alertmanager：处理告警，实现告警分组、去重、抑制、路由通知
-Grafana：告警可视化
-Pushgateway：推模式网关，补充支持短生命周期任务的指标推送
+候选人的回答提到了多实例分片存储 + Thanos远程存储与查询聚合，并给出了“单集群支撑20万+指标点、查询延迟500ms以内”的具体数据。
+无论数据是否真实，这种回答方式本身值得参考：原理 + 架构方案 + 量级
 
 
-> Grafana核心特点：
-统一数据源：不仅支持 Prometheus，还支持 Elasticsearch、MySQL、AWS CloudWatch、Loki（日志）等几十种数据源。这意味着可以在同一个界面查看监控指标、日志和链路追踪。
-丰富的图表：提供时间序列图、柱状图、热力图、状态面板、地理信息图等丰富的展示方式。
-动态仪表盘：支持通过变量定义（如选择不同的“服务器”或“命名空间”），实现仪表盘的动态交互，无需创建无数个重复的图表。告警与协作：
-Grafana 也具备较新的统一告警能力，可以在图表上直接配置告警规则并集成到企业通讯工具。
+> 采集接口
+Prometheus 采 K8s 按层级来：节点指标用 node-exporter；
+Pod 和容器指标拉 kubelet 内置 cAdvisor 的 /metrics/cadvisor；
+业务指标拉应用自己的 /metrics；集群对象状态用 kube-state-metrics。
+
+> Exporter 的作用是什么?举几个常见 Exporter。
+Exporter 就是 Prometheus 的“指标翻译器”，把主机、中间件、应用的非标准指标转成/metrics指标 供拉取。
+常见有 node_exporter 采主机，mysqld_exporter 采 MySQL，cAdvisor 采容器指标。
+
+> 应用如何暴露 redis 指标? 
+配置 Redis 指标分两步：先部署 redis_exporter，
+然后在 Prometheus 的 scrape_configs 里加一个 job，targets 指向 redis exporter 地址和端口，按需打标签。
+
+如何监控 K8s 集群中的 Node、Pod、Deployment?
+如何通过 Prometheus 发现 Pod 频繁重启、OOMKilled、CPU Throttling?
+多集群监控如何做?
 
 
 
-# 怎么采集
-> exporter有什么用
-Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式的系统，采集并转成 metrics 指标，
-让 Prometheus 能统一监控。一句话：没有 Exporter，Prometheus 就监控不了这些系统。
+# 告警与 Alertmanager（5）
+- Alertmanager 的主要职责是什么?
+
+- 告警通知链路如何设计?     钉钉、企业微信、邮件、PagerDuty 如何分级?
+告警通知链路就是：Prometheus 规则触发告警 → Alertmanager 收敛降噪 → 按severity路由分发 → 通知到人并闭环。
 
 
-> 配置MySQL Exporter
-1. 建监控账号：在MySQL里创建一个专用账号，别用root。
-2. 配Exporter连接：在Exporter所在机器上写一个.my.cnf文件，把账号密码填进去，启动Exporter后它会在9104端口暴露指标。
-3. 让Prometheus抓取：在prometheus.yml里加一个名为mysql的job，targets指向Exporter的地址加9104端口。
+- 追问：关于告警你们是具体怎么做的？
+我们先把告警分 P1-P3，规则里加 `for` 防抖；触发后统一进 Alertmanager 做分组、去重、抑制和静默；再按值班路由通知：P1 走电话加告警群，P2 走钉钉群和短信，保证先收敛、再分级触达。
+// 分级、避免告警风暴
+
+- 追问：收到告警之后你们怎么去处理？
+预案平台，普通告警自行处理，敏感改动请示上级，并有紧急联系人机制
+
+> 如何抑制告警
+- 只告警需要人干预的问题
+- 设置 for: 5m 以上，避免瞬时抖动
+- 用 Alertmanager 抑制：节点挂了就不单独告上面的 Pod
 
 
+
+# 部署与配置
+> Prometheus Operator 的作用是什么?
+Prometheus Operator 就是 K8s 里的“Prometheus 管家”：你把监控目标、告警规则写成 CRD，
+比如 ServiceMonitor、PrometheusRule，它自动生成 Prometheus 配置、做服务发现、管理实例和扩缩升级
+
+> ServiceMonitor、PodMonitor、AlertmanagerConfig 分别做什么?
+ServiceMonitor 和 PodMonitor 都是告诉 Operator 监控对象
+ServiceMonitor 按 Service 选 endpoints，适合有 Service 的服务；
+PodMonitor 直接选 Pod，适合没 Service 的 Pod。
+AlertmanagerConfig 则管“告警怎么发”
 
 
 > 安装prometheus
-部署 Prometheus 就用 kube-prometheus-stack 这个 Helm Chart，
-添加helm仓库、建namespace、helm install安装，Prometheus、Alertmanager、Grafana 就全起来了。
+先建 monitoring 命名空间，加 Helm 仓库，然后 是用helm install 装 kube-prometheus-stack ,
+一条命令把 Operator、Prometheus、Alertmanager 和 Grafana 全带起来
 之后监控目标不用手写配置，用 ServiceMonitor 选 Service，指定需要监控的服务，Operator 自动发现；
 用PrometheusRule定义告警；
 最后 Grafana 导入看板可视化。Operator 自动生效。
+
+
+> Prometheus的告警配置？
+在group里写expr规则，在rules里写告警条件、在for添加持续时间，防抖动、
+在annotations填告警描述 ，Operator 自动加载生效
+
+
+> Alertmanager配置
+- 先配置 Alertmanager 的 ConfigMap，
+• 就是定义 route 决定告警怎么分组、分发给谁；
+• receivers 定义邮件通知渠道；
+• inhibit_rules 做告警抑制，避免重复轰炸。
+- 创建一个depolyment,把ConfigMap挂到pod
+- 创建一个Service，用于给 Alertmanager Pod 提供稳定的访问
 
 
 > 配置StorageClass
@@ -62,9 +114,14 @@ Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式�
 - 用ClusterRoleBinding把sa跟ClusterRole绑定在一起，赋予sa权限
 - 定义Deployment资源，把使用前面配置好的sa，Config挂载到pod,
 
+还要改
+持久化存储——默认是 emptyDir，Pod 重启数据就没了
+资源限制——不设的话可能把节点内存吃光
 
+
+# 可视化
 > 访问Grafana
-- 使用NodePort，将Grafana映射到宿主机端口进行访问
+- 用kubectl port-forward，将Grafana映射到宿主机端口进行访问
 - kubectl get sv 查 cluesterIP 和 port
 - 根据查到IP 和 port 去访问
 
@@ -75,46 +132,26 @@ Exporter 就是翻译官：把 Linux、MySQL 这些不会说 Prometheus 格式�
 - 选择你的Prometheus数据源
 
 
-> 部署Alertmanager
-- 先配置 Alertmanager 的 ConfigMap，
-就是定义 route 决定告警怎么分组、分发给谁；
-receivers 定义邮件通知渠道；
-inhibit_rules 做告警抑制，避免重复轰炸。
-- 创建一个depolyment,把ConfigMap挂到pod
-- 创建一个Service，用于给 Alertmanager Pod 提供稳定的访问
 
 
-> 配置prometheus规则
-在group里放规则，在rules里写告警条件、在for添加持续时间，防抖动、
-在annotations填告警描述 ，Operator 自动加载生效
-
-
-> 怎么查询/PromQL
-PromQL 查询我一般按“选指标—算速率—做聚合—出结果”来：先用指标名和标签筛数据，比如 node_cpu_seconds_total{mode="idle"}；
-计数器用 rate 或 irate 算变化率；再用 avg/sum by(instance) 聚合；最后做百分比、比较或数学运算。
-先在 Prometheus 表达式浏览器验证，再放进 Grafana 面板，注意时间范围和步长。这样逻辑清楚，查询也稳。
-
-
-> 如何抑制告警
-- 只告警需要人干预的问题
-- 设置 for: 5m 以上，避免瞬时抖动
-- 用 Alertmanager 抑制：节点挂了就不单独告上面的 Pod
+# 高可用、规模化与存储（4）
+- 单个Prometheus在获取节点数量巨大的情况下，会导致性能瓶颈，应该如何优化？
+数据库、分片、多个Prometheus各自处理500节点。
+- 追问：各自采集到500节点后，如何控制用户访问到指定的内容？因为内容在两个数据库的某一个之中。
+- Prometheus单点故障怎么办？
+- 追问：那如果挂载的节点Node挂了，新开的Pod里面的数据也就空了？那还有什么方法吗？
 
 
 
 # 补充
-- 如何分析指标数据，定位性能瓶颈。 
+> 如何分析指标数据，定位性能瓶颈。 
 我一般先定现象，看延迟、错误率、吞吐这些黄金指标，延迟重点看 P95标，锁定异常时间点；
 再用变量和维度下钻到实例、服务、接口；接着对比基线、关联资源指标找瓶颈；最后结合日志和链路验证根因。
 
-- 收到告警后怎么定位和处理的/定位故障
+> 收到告警后怎么定位和处理的/定位故障
 收到告警先看影响面，严重就先回滚、扩容止血；然后按“指标定范围、日志找报错、链路定慢在哪”逐层定位；修完回写 Git，最后复盘根因。核心就是：先止血，再定位，后复盘。
 
-- 如何维护自动化日志？
-- 怎么和日志/链路怎么配合
+> 如何维护自动化日志？
+> 怎么和日志/链路怎么配合
 回答中提到将日志发送到集中存储（ELK/Elasticsearch、Splunk或Grafana Loki + 对象存储），并配置轮转和保留策略。
 指标看现象，日志查根因
-
-
-
-

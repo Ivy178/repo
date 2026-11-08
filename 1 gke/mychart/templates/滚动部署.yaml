@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # 最多多创建 1 个新 Pod
+      maxUnavailable: 0    # 保证旧 Pod 完全就绪后才开始删，服务不中断
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+        - name: myapp
+          image: myapp:1.0.0
+
+
+# maxSurge: 1 + maxUnavailable: 0 的常见组合意味着：先启动一个新版 Pod，等它 Ready 后，才删一个旧 Pod，始终保持总可用副本数不低于期望值，实现零中断。

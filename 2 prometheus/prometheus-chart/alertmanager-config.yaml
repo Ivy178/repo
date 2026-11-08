@@ -1,0 +1,44 @@
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-prometheus-stack-alertmanager-config
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    release: kube-prometheus-stack
+data:
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m  # 告警恢复超时时间
+      # 邮箱配置（请替换为真实值）
+      smtp_smarthost: 'smtp.qq.com:465'
+      smtp_from: '发件人QQ邮箱账号'
+      smtp_auth_username: '发件人QQ邮箱账号'
+      smtp_auth_password: 'QQ邮箱授权码'
+      smtp_require_tls: false
+
+    route:
+      group_by: ['alertname', 'cluster', 'node']  # 告警分组维度
+      group_wait: 10s        # 分组等待时间（收集同组告警）
+      group_interval: 10s    # 同组告警间隔
+      repeat_interval: 1h    # 重复告警间隔
+      receiver: 'email-receiver'  # 默认接收者
+
+    receivers:
+      - name: 'email-receiver'
+        email_configs:
+          - to: '收件人QQ邮箱账号'  # 请替换为目标接收邮箱
+            send_resolved: true    # 告警恢复时发送通知
+
+      - name: 'dingding'
+        webhook_configs:
+          - url: 'http://dingtalk:8060/dingtalk/webhook1/send'
+            send_resolved: true
+
+    inhibit_rules:  # 抑制规则（避免重复告警）
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname', 'cluster', 'node']

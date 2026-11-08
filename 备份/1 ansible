@@ -1,0 +1,163 @@
+# 基础概念与用途
+> 你的项目怎么用ansible? 补丁
+上个项目主要用ansible给vm打补丁，就是系统软件包更新，比如RHEL/CentOS安全补丁、Debian/Ubuntu软件包更新
+
+> 知道 ansible 的 playbook 吗？用来做什么的？
+Playbook 就是 Ansible 的“运维剧本”，用 YAML 写清楚对哪些机器、按什么顺序执行哪些任务，
+用来批量装软件、改配置、发版本，把手工操作变成可重复的自动化流程。
+
+> Ansible 怎么用来实现自动化管理
+Ansible 先通过 inventory 定义要管哪些机器，再用 playbook 把任务编排成 YAML，通过 SSH 调用模块批量执行；
+模块幂等，重复跑也不会乱，所以能把装软件、改配置、发版本这些手工活变成自动化管理。
+
+> role 和 playbook 的关系
+• Playbook 是顶层剧本，定义对哪些机器、按什么顺序执行；
+• Role 是可复用的任务包，把 tasks、templates、vars、handlers 按标准目录组织好。
+• Playbook 调用 Role，Role 被复用，结构清晰、好维护。
+
+
+# 命令与 Playbook 使用
+> ansible 有哪些命令
+最常用就是用 ansible跑临时命令，ansible-playbook 跑剧本
+
+> Ansible playbook 的使用
+用起来就三步：先写 inventory 告诉它管哪些机器，再写 YAML playbook 定义 hosts 和 tasks，
+最后跑 ansible-playbook -i hosts.ini site.yml
+
+> 写了几个 playbook，包括 Python API 调用
+用Python代码里调用Playbook，主要导入ansible_runner包，然后用ansible_runner.run，
+并且指定site.yml去启动，返回对象里直接能拿到 status 和 rc
+
+
+# 模块与任务编写
+> 用过哪些模块   //分发文件用什么、部署服务用什么
+> 分发一个小文件给一万台机器，用什么模块、怎么做
+> ansible 的 cmd 和 shell 模块的区别（管道）
+> 常用模块
+
+# 并发与批量管理
+> 怎么做并发执行同时跑更多任务
+• 开启 SSH Pipelining：减少 SSH 连接次数，大幅提升执行速度
+• 调整 forks 数量：根据控制节点性能和网络情况调整并发数
+• 使用 Mitogen 加速：Mitogen 是一个 Ansible 加速插件，实测能提升 2-5 倍速度pip install mitogen
+
+> 现在给你 300 台服务器，你怎么管理
+首先在inventory 对300台机器分组，比如按业务、环境、区域分组
+然后用 Ansible 做批量管理，比如装软件、改配置、发版本全走 playbook，幂等可重复；
+
+
+
+# 异常处理与重试
+> 执行 100 台机器，98 台成功、2 台没成功，怎么办
+• 先看PLAY RECAP定位哪两台失败、什么原因，比如网络不通、磁盘满了
+• 然后只针对失败机器重跑，Ansible会自动生成.retry文件，
+• 直接用--limit @site.retry只补跑失败的机器；
+• 环境问题先修再跑，网络抖动就重试；因为playbook幂等，不会影响已成功的98台，最后再全量验证一遍。
+
+
+> 两台机器的 playbook 一直执行没有返回，另外 98 台都完成了，怎么判断是哪两台、怎么处理
+用 -vvv 看日志卡在哪一步，或者直接看 .retry 文件
+
+>> 不能用RECAP Playbook 一直卡着不结束,这时候 RECAP 根本没输出，看不到
+
+> 已知 playbook 里第三个任务失败，怎么单独重跑第三个任务；
+给第三个任务打个 tag，比如 retry_third，然后 ansible-playbook site.yml --tags retry_third，就只跑它；
+如果想从第三个开始往后跑，用 --start-at-task "任务名"。
+
+> 如果自动化程序不允许改源码，又怎么办
+源码不能动，就用 --start-at-task 跳过前面，再用 --step 交互式拦停，到失败任务时按 y，其他一律按 n 跳过，就能精准只跑这一个
+纯命令行控制，不改一行 YAML。
+
+>> 在yaml文件里面加tag，就行
+
+
+> 如何判断脚本执行成功、失败如何回滚
+• 看 PLAY RECAP 的 failed是否为0，如果是0则任务成功
+• 用 block/rescue 捕获失败，block 里任何一步失败，自动跳到 rescue。
+• 触发回滚任务，切回上一版本。就是先能判断失败，再提前准备回滚路径。
+
+
+# 安全与敏感数据
+> Ansible 的加密和安全性，传输密钥文件时怎么防止有 root 权限的人看到临时 Python 文件
+
+> 敏感数据怎么保存（Vault）
+敏感数据用 ansible-vault 加密后再进 Git，明文绝不入库；运行时用 --ask-vault-pass 或密码文件解密
+
+>> 为什么进git
+加密文件进 Git 是为了“配置跟着代码走”，明文和密码永远不进仓库
+
+>> 怎么分环境管理
+用ansible-vault encrypt给每个环境单独加密、单独打标签，比如dev、prod
+密码文件也分开
+运行时指定解哪个环境密码文件，Playbook 里按环境引用对应的 secrets 文件。
+
+
+# 配置与变量管理
+> 变量位置？优先级？
+优先级大致是，命令行最高，然后role vars、play vars、inventory，最后 role defaults 最低
+
+> Inventory
+首先在inventory 对机器分组，比如按业务、环境、区域分组
+可以用 Ansible 对分组做批量管理，比如装软件、改配置、发版本全走 playbook，幂等可重复；
+
+> 配置文件优先级
+Ansible 按“环境变量 → 当前目录 → 家目录 → 全局”顺序找，找到第一个就用，后面全忽略
+
+> roles 目录结构
+role 就是按约定目录放文件，host, tasks 是主逻辑，templates/files 放内容，defaults/vars 放变量，handlers 放触发器，Playbook 一调用，Ansible 自动按目录找。
+
+# 脚本与监控
+> Ansible 监测宿主机脚本优化
+
+
+# 其他
+> Playbook 怎么保证幂等
+核心是靠 Ansible 模块本身幂等，比如 yum、copy、template、service，执行多次结果一样。
+尽量不用 shell/command，非要用就加 changed_when 或 creates 判断。这样重复跑不会重复改。
+
+
+
+
+# 补充
+> ansible 某台机器执行失败，如何让其他机器继续跑？
+Ansible 默认就是主机级失败隔离：某台机器任务失败，只把这台从当前 play 里摘掉，其他机器继续跑。核心是别开 any_errors_fatal: true
+只要任何一台机器失败，然后立即终止整个 Play，后续所有任务都不会再执行。
+
+> ansible 如何只更新 20% 的机器，确认没问题再全量？
+可以直接用渐进式批次，比如 serial: [1, "20%", "100%"]，先拿一台机器当金丝雀，再扩到20%，最后全量。
+再配合 max_fail_percentage 设个失败熔断，第一批有问题整个 play 直接停掉，不会滚到后面去。
+
+> 如何把现有手工服务器纳入 Ansible 管理？
+• 先盘点机器，配好 SSH 免密和 sudo，写进 inventory；
+• 然后用 ansible -m ping 和 gather_facts 验证连通；
+• 先跑只读任务试水，再把手工作业写进playbook，分批纳管。
+
+> CI/CD 里怎么集成 Ansible？如何做到先 check、再 apply？
+CI/CD 里把 Ansible 放部署阶段：先跑 `--syntax-check` 和 `--check --diff` 做 dry-run，只预检不落盘，把变更清单给审批；
+确认没问题再正式 apply,执行playbook，失败就用 retry/limit 单机补跑，关键批次加 `serial` 和熔断。
+
+
+> 描述你做过的ansible,playbook过程
+
+
+# 架构与核心概念
+Ansible 和 Shell的区别？
+Shell 是命令式，一步步执行，重跑不一定幂等，适合单机；Ansible 是声明式，描述目标状态，模块幂等，重跑安全，适合多机批量
+
+> 为什么说 Ansible 是 Agentless？受控节点需要装什么？
+Ansible 是 Agentless，因为它在控制端把模块通过 SSH 推过去执行，受控节点不用装常驻 agent。
+受控端只要有 SSH 服务、Python 解释器和 sudo 权限就行；Windows 节点则是 WinRM + PowerShell。
+
+
+> notify 和 handlers 什么时候触发？为什么能避免重复重启服务？
+notify 只有任务真的变了（changed）才触发；handler 不立刻跑，等当前这批任务结束后统一执行，
+而且同名 handler 多次通知只跑一次。所以配置没变不触发，变了也只 reload 一次，避免重复重启
+
+
+# 变量、条件与循环
+> register 变量怎么用？常见排查场景有哪些？
+register 就是把任务执行结果存成一个变量，后面用 when 判断、debug 打印、until 重试、failed_when 自定义失败条件
+
+> gather_facts 是什么？为什么大规模执行时可能关掉它？
+`gather_facts` 是 Ansible 在 play 开始前自动跑 `setup` 收集主机系统信息，存成 `ansible_facts` 给模板和条件用。
+大规模时每台都收一遍又慢又占连接，所以 playbook 不用 facts 就设 `gather_facts: no` 关掉提速，需要时再单独收或开缓存。

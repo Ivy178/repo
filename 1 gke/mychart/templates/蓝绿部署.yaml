@@ -1,0 +1,37 @@
+# blue-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: myapp, version: blue }
+  template:
+    metadata:
+      labels: { app: myapp, version: blue }
+    spec:
+      containers:
+        - name: myapp
+          image: myapp:1.0.0
+---
+# green-deployment.yaml（先部署，但不接流量）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-green
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: myapp, version: green }
+  template:
+    metadata:
+      labels: { app: myapp, version: green }
+    spec:
+      containers:
+        - name: myapp
+          image: myapp:1.1.0
+
+
+# 第三步：验证绿色没问题后，一条命令切换流量：kubectl patch service myapp -p '{"spec":{"selector":{"version":"green"}}}'
+# 切换后所有流量瞬间指向 myapp-green 的 Pod；回滚就是再把 selector 改回 blue

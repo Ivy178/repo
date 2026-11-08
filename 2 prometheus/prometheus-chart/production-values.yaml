@@ -1,0 +1,32 @@
+# production-values.yaml
+prometheus:
+  prometheusSpec:
+    # 持久化存储——默认是 emptyDir，Pod 重启数据就没了
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi  # 根据集群规模调整
+    # 资源限制——不设的话可能把节点内存吃光
+    resources:
+      requests:
+        memory: 4Gi
+        cpu: 2
+      limits:
+        memory: 8Gi
+        cpu: 4
+    # ⚠️ Prometheus 3.x 的 retention 配置方式变了！
+    # 不要用 retention: 15d（旧方式），要用下面的 tsdb 块
+    # 注意：此配置仅对 Prometheus >= v3.11.0 + Operator >= 0.92.0 生效
+    tsdb:
+      retention:
+        time: 15d          # 按时间保留
+        # size: 100GB      # 按大小保留，二选一或同时使用
+        # percentage: 80   # 按 PVC 容量百分比保留（0-100），三选一或组合使用
+
+grafana:
+  persistence:
+    enabled: true
+    size: 10Gi

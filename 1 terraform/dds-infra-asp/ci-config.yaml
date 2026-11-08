@@ -143,7 +143,7 @@ g3: # optional: Include this config block if you perform deployments via g3
     # summary: "g3 poc with standard pipeline" # required: only required if you required to deploy artifacts from nexus, provide summary for your package work item
     pwi_artifact_name: "terraform" # required: provide artifact name for your package work item
     pwi_artifact_version: "${params.artifact_version}" # required: provide artifact version for your package work item
-    nexus_artifact_path: "https://nexus302.systems.uk.hsbc:8081/nexus/repository/raw-alm-dev_n3p/com/hsbc/wpb/dds/infra/INFRA-${params.application_version}.zip"
+    nexus_artifact_path: "https://nexus302.systems.uk.hsbc:8081/nexus/repository/raw-alm-dev-n3p/com/hsbc/wpb/dds/infra/INFRA-${params.application_version}.zip"
   # package_from_github: # optional: use this option to deploy artifacts from github
   #   summary: "g3 poc with standard pipeline" # required: only required if you required to deploy artifacts from github. This example is showing creation of g3 PWI from github options.
   #   pwi_artifact_name: "infra_terraform_poc" # required: provide artifact name for your package work item

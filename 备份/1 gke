@@ -39,10 +39,11 @@ gcloud container clusters get-credentials CLUSTER_NAME \
  
 # etcd
 > 在gke,怎备份和恢复 etcd
-备份走 Backup for GKE 或 Velero，备份 K8s 资源清单和 PVC 快照。Backup for GKE 是 GKE 原生服务，定义 BackupPlan 指定命名空间和保留策略就行；Velero 更通用，适合跨集群迁移。
-确认备份有效，先看备份作业状态和资源数量，但关键是定期恢复到测试集群做演练，能正常拉起 Pod 和 PVC 才算有效。
-恢复时用 RestorePlan 或 velero restore 指定备份，恢复到目标集群后验证 Pod、PVC 和业务健康。
+我们是使用gke，使用Backup for GKE备份/恢复工作负载，含 K8s 配置和 PV 卷数据
+因为etcd是托管，无需任何操作。
 
+> 为什么所有组件都通过 apiserver 访问集群，而不直接读写 etcd？
+因为 apiserver 是唯一入口：统一做认证、鉴权、准入校验和版本转换，组件直接写 etcd 就绕过这些，容易写坏数据；
 
 # containerd
 > Docker 和 K8s的核心区别?
@@ -76,45 +77,28 @@ Docker 是完整工具链，containerd 是底层运行时，Docker 底层也调�
 总结一句：调度就是给 Pod 选节点，先过滤再打分，最后绑定。核心是资源、亲和、污点这些规则。
 
 
-> 怎么把 Pod 调度到指定节点
-简单用 nodeSelector 按标签选；更灵活用 nodeAffinity；
-强制指定用 nodeName；如果节点有污点，还要加 toleration。
-
-
-> 一个节点只跑一个服务
-如果每节点跑一个副本，用 DaemonSet。如果要独占节点，给节点打 taint，Pod 加 toleration 和 nodeAffinity。
-节点已有服务就 cordon 禁止调度，drain 驱逐到其他节点，再部署独占 Pod。注意 DaemonSet 驱逐时要忽略。           
-
-
+          
 > 使用过K8s的调度策略（HSBC）
 nodeSelector、affinity、taints/tolerations
 
-
-> 使用过K8s的调度策略（如nodeSelector、affinity、taints/tolerations等） （HSBC）
-给节点贴标签，Pod 挑标签。比如节点贴了 ssd，Pod 写 nodeSelector: disktype=ssd，它就只去有 ssd 标签的节点。没这样的节点，Pod 就一直 Pending。
-作用：让特定 Pod 跑在指定机器上。
-用途：我想让某个服务只跑某类节点，比如 GPU 任务只跑 GPU 机器。
-
+> nodeSelector/affinity 作用
+nodeSelector 就是最简单的节点标签匹配，Pod 只去带指定标签的节点；nodeAffinity 更灵活，支持操作符、硬性 required 和软性 preferred。
+作用是把 Pod 调度到合适的节点上，比如 GPU、SSD、指定可用区或架构；简单场景用 nodeSelector，要精细控制或软偏好就上 affinity。
 
 > taints/tolerations
-定义：节点贴“污点”，Pod 带“容忍”。比如 节点打上污点，就是说“我不欢迎普通 Pod”。Pod 带上对应的容忍，就是说“我能忍，让我上去”。两个匹配，Pod 才能调度到这个节点；不匹配，Pod 就不来。
-作用：让节点挑 Pod。比如 master 节点打污点，普通服务就上不去；GPU 节点打污点，只有带容忍的 GPU 任务能跑。
-解决：专用节点不被乱占，有问题节点自动赶 Pod，控制哪些 Pod 能上哪些机器。
-一句话：nodeSelector 是 Pod 挑节点，taints/tolerations 是节点挑 Pod。
-
-
-> Kubernetes中反亲和什么？” ——考察PodAntiAffinity，即如何让Pod尽量分散到不同节点。 （Citi）
-反亲和就是：别把 Pod 都放一起，尽量分开。比如你有 3 个副本，反亲和让它们分到 3 台机器上。这样坏一台，只挂一个；要是全挤一台，一挂全挂。
-分散部署，避免单点故障，也避免两个服务互相抢资源、互相干扰。
-// 用podAntiAffinity可以分散Pod到不同节点
-
+taint 打在节点上“挑人”，普通 Pod 不能上；toleration 打在 Pod 上“通行证”，能容忍污点才允许调度。
+作用是控制哪些 Pod 能上哪些节点，常用于 GPU、数据库专用节点隔离，以及节点维护时驱逐。
 
 > Node Affinity(节点亲和,灵活约束)
 硬约束:必须满足,否则调度失败
 软约束:优先调度到匹配节点,不满足也可调度
 
-> Taint(节点污点,节点侧排斥)
-节点级配置,主动排斥所有 Pod,无对应容忍则无法调度。
+> Kubernetes中反亲和什么？ （Citi）
+podAntiAffinity把Pod到不同节点。比如你有 3 个副本，反亲和让它们分到 3 台机器上。这样坏一台，只挂一个；要是全挤一台，一挂全挂。
+作用就是分散部署，避免单点故障，也避免两个服务互相抢资源、互相干扰。
+
+> nodeSelector、affinity、taints/tolerations配合使用
+nodeSelector 粗筛到 GPU 节点，nodeAffinity 再精确限定可用区，加taint普通 Pod 被挡,  加toleration让GPU Pod 才稳稳落到目标节点 
 
 > 给节点打污点格式:key=value:effect                                    ???
 kubectl taint nodes node-1 dedicated=monitoring:NoSchedule
@@ -124,17 +108,49 @@ NoSchedule:硬排斥,新 Pod 不能调度,已有 Pod 不受影响
 PreferNoSchedule:软排斥,尽量不调度,非强制
 NoExecute:硬排斥 + 驱逐,新 Pod 不能调度,已有 Pod 无对应容忍则被驱逐
 
-
-> Toleration
-Pod 级配置，声明可匹配对应污点，允许调度到污点节点。
-
 > 同时给同一个 key=value 打上 NoSchedule 和 NoExecute 两种污点
 这是运维中最常见的做法，目的是先阻止新Pod进入，再逐步“请走”旧Pod，而不是粗暴地一次性驱逐所有Pod，给业务留出缓冲时间。
 
+> 怎么把 Pod 调度到指定节点
+简单用 nodeSelector 按标签选；更灵活用 nodeAffinity；
+强制指定用 nodeName；如果节点有污点，还要加 toleration。
+
+> 一个节点只跑一个服务
+如果每节点跑一个副本，用 DaemonSet。如果要独占节点，给节点打 taint，Pod 加 toleration 和 nodeAffinity。
+节点已有服务就 cordon 禁止调度，drain 驱逐到其他节点，再部署独占 Pod。注意 DaemonSet 驱逐时要忽略。
 
 > Taint&Toleration 是节点维度的资源隔离,通常和亲和能力配合,实现专用节点池的精准调度
 
+> 节点资源充足但 Pod 调度失败，可能是什么原因？
+最可能卡在硬约束上：节点有污点但 Pod 没配 toleration，或者 nodeSelector/affinity 写得太死匹配不到任何节点；
+再就是 hostPort 被占、PVC 没绑定、Pod 反亲和规则互斥
 
+> kubectl cordon 和 kubectl drain 的区别？什么场景用？
+cordon 只是把节点标记为不可调度，已有 Pod 不动；drain 是先 cordon，再驱逐节点上的 Pod，把负载迁走。
+只想阻止新调度用 cordon；节点要维护、升级、下线，就用 drain 清空。
+
+
+
+# Pod 与生命周期
+> Pod 为什么是最小调度单元，不是容器？
+容器是实际跑进程的单位，但 K8s 调度按 Pod 整体走：同一个 Pod 里的容器要共享网络、卷和生命周期，必须落在同一节点，
+拆开调度就乱套了。所以容器是执行单位，Pod 才是最小调度和部署单元。
+
+> Pod 里多个容器共享什么？
+Pod 里的容器共享同一个网络,同一 IP、localhost 互通，端口不能冲突；
+还能挂同一批 volume 共享数据，并且被一起调度、一起管理。文件系统和进程空间默认不共享。
+
+> requests/limits 区别？不设 limits 有什么风险？QoS 怎么判定？
+equests 管调度保证，limits 管运行上限；不设 limits 容易吃满节点、OOM 或挤占邻居。QoS 判定：都设且 requests=limits 是 Guaranteed，部分设是 Burstable，都没设是 BestEffort。
+
+> Pod 重启策略 Always、OnFailure、Never 的区别？
+Always 是容器退出就重启，适合长期服务；OnFailure 只在非零退出时重启，适合批处理；Never 完全不重启，失败就交给上层处理。Job 常用 OnFailure，普通业务 Pod 用 Always。
+
+> QoS怎么决定赶谁走？
+BestEffort → Burstable（超出 requests 的）→ Guaranteed
+
+> initContainer 有什么作用？执行顺序如何？
+initContainer 就是在主容器启动前做初始化的，比如等依赖就绪、拉配置、建目录。执行顺序是按定义串行来，一个成功才跑下一个，全部成功主容器才启动，失败按重启策略重试。
 
 
 
@@ -171,6 +187,9 @@ DaemonSet：确保在集群的每个节点上运行一个 Pod 副本，适用于
 > Pod、Deployment、Service 关系
 Deployment 管 Pod 副本和更新，Pod 是实际运行的容器组，Service 给 Pod 提供稳定访问入口和负载均衡。Pod IP 会变，Service 不变，通过标签选择器关联。
 
+> 为什么Deployment 不直接管 Pod？
+要是 Deployment 直接管 Pod，就没这个旧版本副本集可切了。
+
 > k8s无状态服务不依赖本地数据?
 对，但不是“不用数据”，而是不把数据绑在 Pod 本地。业务状态外置到数据库、Redis、对象存储，
 所以 Pod 随便杀、随便扩，重建也不丢东西。
@@ -184,19 +203,21 @@ Deployment 管 Pod 副本和更新，Pod 是实际运行的容器组，Service �
 - 例如将普通 API、高内存任务分别部署到不同节点池，实现资源隔离、灵活调度和成本优化。
 - 常用 nodeSelector、Node Affinity、Taint 和 Toleration 控制 Pod 的调度位置
 
+> Headless Service 的作用是什么？
+Headless Service 就是 clusterIP: None，不分配虚拟 IP，让客户端自己做服务发现和负载均衡；主要给 StatefulSet、数据库这类需要稳定网络标识
 
 
 
 # release
 > K8s 更新策略 / 发布模式
 Deployment 支持 RollingUpdate（滚动更新，默认）和 Recreate（先删后建）。
-发布模式常见：滚动发布、蓝绿发布、金丝雀发布、灰度发布。滚动最常用，蓝绿切流量快，金丝雀按比例放量。
+发布模式常见：滚动发布、蓝绿发布、金丝雀发布。滚动最常用，蓝绿切流量快，金丝雀按比例放量。
 
 > 怎么保证发布不影响业务
 滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。
 就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
 
->> maxUnavailable，maxSurge 用于滚动更新
+>> maxSurge 管最多多建几个 Pod，maxUnavailable 管最多允许挂几个，一个控扩容上限，一个保可用性，都用于滚动更新
 >> maxUnavailable: 0 + maxSurge: 1，意思是“一个都不许少，先多起一个新的，等就绪再慢慢换”。
 
 18、滚动更新和回滚怎么做？
@@ -206,17 +227,18 @@ Deployment 通过 RollingUpdate 策略逐步创建新版本 Pod，并在新 Pod 
 
 
 >> 发布策略
-滚动发布：逐个替换旧实例，新旧共存，省资源，但回滚慢，版本会混杂。
-蓝绿发布：准备两套环境，蓝是旧、绿是新，测好一键切流量，回滚快，但资源翻倍。
-金丝雀发布：先切一小部分流量到新版本，验证没问题再逐步扩大，风险低。
-灰度发布：按用户特征分批放量，比如只给 1% 用户或特定地区，本质是金丝雀的精细化。
+滚动发布：滚动更新用 Deployment 默认的 RollingUpdate,逐个替换旧实例，省资源，但回滚慢
+蓝绿发布：蓝绿是两套 Deployment，Service 的 selector 先指旧版，验证后整体切到新版。
+金丝雀发布：金丝雀用 Service或Ingress按权重导流，先给小比例流量，验证没问题再逐步扩大，风险低。
 
 >> 使用场景区别
 滚动发布适合日常无状态服务，资源省，但回滚慢；
 蓝绿适合大版本上线，要秒级回滚、资源充足；
 金丝雀适合新功能先小流量试，验证没问题再扩大；
-灰度适合按用户、地域分批放量，做精细化验证。
 
+> 金丝雀跟蓝绿区别
+蓝绿是两套完整环境，验证后流量整体切到新版本，回滚就切回来，干脆但资源翻倍；
+金丝雀是先放一小部分流量给新版本，没问题再逐步放大，风险小但要做流量控制和观测。
 
 
 
@@ -225,7 +247,7 @@ Deployment 通过 RollingUpdate 策略逐步创建新版本 Pod，并在新 Pod 
 都是解耦配置和镜像的。
 ConfigMap 存普通配置，比如环境变量、配置文件；
 Secret 存敏感信息，比如密码、token、证书。
-Secret 默认只是 base64 编码，不是加密，生产要开 etcd 加密或 KMS。
+Secret 默认只是 base64 编码，不是加密，生产要开 etcd 加密或 KMS。  //base64它可逆，谁拿到都能解码
 
 > ConfigMap 可以被修改吗
 可以改，kubectl edit 或 apply 都行。但注意两点：改了不会自动让已运行 Pod 生效，环境变量注入的要重启 Pod，挂载卷的可能延迟同步；
@@ -235,7 +257,6 @@ Secret 默认只是 base64 编码，不是加密，生产要开 etcd 加密或 K
 
 >> 环境变量注入 与 挂载卷 区别
 环境变量改完要重启，挂载卷改完自动同步；简单键值用环境变量，配置文件用挂载卷。
-
 
 > ConfigMap 和 Secret怎么配置
 配置就是写 YAML：ConfigMap 用 data 存键值，Secret 用 stringData 或 data（base64）存键值，
@@ -283,6 +304,10 @@ ExternalName 则通过 DNS 别名将 Service 指向集群外部的域名。 集�
 外部用户 -> Google Cloud Load Balancer -> Ingress -> Service Pod
 Ingress 本身不直接选择 Pod，而是把流量转发给 Service，再由 Service 通过 selector 转发到 Pod。
 
+> kube-proxy 的 iptables 模式和 IPVS 模式有什么区别？
+iptables 像查一张越来越长的清单，一条条往下匹配，Service 越多越慢；
+IPVS 像查字典，直接按哈希表定位，规模大也稳，还支持轮询等算法。 小集群 iptables 够用，大集群上 IPVS 更合适。
+
 
 > 怎么配置ingress
 配置 Ingress 分三步：指定控制器、配路由规则、挂 TLS 证书。
@@ -311,7 +336,8 @@ LoadBalancer Service：每个 Service 想要外网访问，就得单独给它一
 Ingress：对外只暴露一个入口 IP
 
 >> LoadBalancer 跟 Ingress配合
-LoadBalancer Service 负责“打开大门”，让流量能进来；Ingress Controller 负责“在门内指路”，根据域名和路径把流量送到正确的应用。 两者配合，就实现了用一个公网 IP 入口，支撑多个后端服务的七层流量治理。
+LoadBalancer Service 负责“打开大门”，让流量能进来；Ingress Controller 负责“在门内指路”，根据域名和路径把流量送到正确的应用。 
+两者配合，就实现了用一个公网 IP 入口，支撑多个后端服务的七层流量治理。
 
 > NetworkPolicy定义
 NetworkPolicy就是K8s里的Pod防火墙，用来做网络隔离，控制 Pod 之间以及 Pod 与外部网络之间的流量
@@ -321,7 +347,6 @@ K8s默认网络是“全通”的，任何Pod都能访问任何Pod，很不安�
 > NetworkPolic怎么做
 写个YAML，用podSelector选中一组Pod，
 然后定义ingress（入站）和egress（出站）规则，基于标签、命名空间、IP段或端口来指定允许谁访问谁。
-
 
 
 > Pod 之间通信异常排查
@@ -338,7 +363,11 @@ K8s隔离资源分三层：
 网络层：用 network namespace、CNI 和 NetworkPolicy 隔离 Pod 间流量。
 
 
-
+> Namespace 的作用是什么？如何配合 ResourceQuota、LimitRange 使用？
+Namespace 做逻辑隔离和权限边界，把团队、环境分开。配合使用就是：先建 Namespace，
+再挂 ResourceQuota 限制这个空间的总 CPU、内存和对象数，
+挂 LimitRange 给单个 Pod/容器设默认 requests/limits 和上下限，防止有人忘设或吃满整个空间。
+场景：这样防止某个团队抢光资源，也防止有人漏设资源导致调度乱。
 
 
 # 存储类
@@ -358,6 +387,8 @@ ROX：多节点只读挂载，用来分发静态资源、配置、模型，不�
 一句话：手动 PV 是“先建好一堆固定大小的盘子，等用户来挑”，挑不到就卡住；StorageClass 是“用户要多大，自动做多大”，所以能按需分配。
 减少：手工提前建、容量固定、人工匹配，无法按需 问题
 
+> CSI 的作用是什么？
+CSI 就是 K8s 的存储插件标准，把存储实现从核心代码里解耦出来；厂商按接口写驱动，就能支持动态建 PV、挂载卸载、扩容和快照，K8s 不用内置每家存储。
 
 > 怎么配置StorageClass
 首先，写 YAML, 定义
@@ -368,6 +399,9 @@ ROX：多节点只读挂载，用来分发静态资源、配置、模型，不�
 - allowVolumeExpansion 设 true
 创建后，PVC 引用这个 StorageClass，K8s 就会自动按需动态创建 PV 并绑定，不用手动预先准备存储
 
+> Pod 删除后数据会不会丢失？
+不一定，看卷类型。emptyDir、configMap/secret这些跟 Pod 生命周期走，Pod 一删就丢；hostPath、NFS、PVC 挂的 PV 不随 Pod 删除丢，PV 最终删不删看回收策略。所以有状态数据一定挂 PVC。
+// 看有没挂在pod内部目录
 
 >> 其他
 GCE Persistent Disk 是 GKE 中常用的块存储，适合：数据库、单个 Pod 使用的持久化磁盘、StatefulSet
@@ -380,6 +414,7 @@ StorageClass 使集群能够根据 PVC的请求自动创建 PV,而无需管理�
 > Liveness Probe 和 Readiness Probe 的区别
 LivenessProbe（存活探针）：判断容器是否还活着，失败 → kubelet 重启容器
 ReadinessProbe（就绪探针）：判断容器能不能接收流量，失败 → 从 Service 的 Endpoint 列表摘除 Pod，不重启容器
+ReadinessProbe：startup 管慢启动，成功前不执行前两个探针
 
 15、GKE 自动伸缩有哪些？Citi）
 GKE 自动伸缩主要包括 HPA、VPA 和 Cluster Autoscaler。
@@ -390,6 +425,9 @@ Cluster Autoscaler 根据 Pod 是否能够调度来调整节点数量。通常�
 
 >> HPA定义
 HPA是 k8s 水平 Pod 自动扩缩容组件，根据自定义指标 比如cpu,自动调整工作负载的 Pod 副本数。
+
+> HPA 如何实现自动扩缩容？依赖什么指标？
+HPA 定期从 Metrics API 拉指标，按“当前副本数 × 当前指标 / 目标指标”算期望副本，指标超了扩、低了缩，常见指标CPU/内存，QPS
 
 >> HPA配置
 - 集群必须提前部署 metrics-server,否则无法获取资源指标,HPA 不生效
@@ -502,17 +540,11 @@ Kubernetes RBAC + Google IAM
 
 
 
-> K8s RBAC 理解和实践
-RBAC 就是“谁，对什么资源，能做什么操作”。
-核心四个对象：Role/ClusterRole 定义权限，RoleBinding/ClusterRoleBinding 把权限绑给 User/Group/ServiceAccount。
-Role 是命名空间级，ClusterRole 是集群级。
-实践上就几点：
-· 最小权限：只给需要的 verb 和 resource，别用 *，别随便绑 cluster-admin。
-· 命名空间隔离：开发、测试、生产分开，RoleBinding 绑到具体 namespace。
-· ServiceAccount 专号专用：每个工作负载一个 SA，别用 default。
-· 定期审计：用 kubectl auth can-i 查权限，开 audit log。
-· CI/CD 权限收紧：部署用的 SA 只给对应 namespace 的 deploy 权限。
-总结：RBAC 核心是最小权限加命名空间隔离，SA 专号专用，定期审计。
+> RBAC怎么用
+RBAC 就三步：
+先写 Role 或 ClusterRole 定“能对什么资源做什么动作”，命名空间级用 Role，集群级用 ClusterRole，
+再用 RoleBinding/ClusterRoleBinding 绑到用户或 ServiceAccount；
+最后 Pod 指定 ServiceAccount 就生效，权限按最小给。
 
 
 # 维护
@@ -548,6 +580,7 @@ ImagePullBackOff 就是镜像拉不下来。我一般先 `describe pod` 看 Even
 OOMKilled 就是容器内存超过 limits.memory 被杀掉了，Pod 会突然消失。排查先 describe pod 看 Last State 里的终止原因，有 metrics-server 再用 kubectl top pod 看历史曲线。
 修复分三层：短期 把 limits.memory 调高一些，中期 用VPA让它自动根据历史使用情况调整，长期 查代码里的内存泄漏。
 
+>> 如何定位集群中 CPU/内存占用最高的 Pod？ 最快就是用 kubectl top pod，加上 --sort-by=cpu 或 --sort-by=memory 就能直接按占用排序，一眼揪出最高的那个。
 
 > Readiness/Liveness Probe failed
 K8s 觉得它死了反复重启。最常见原因就是 initialDelaySeconds 设太短，应用还没启动完就开始探，或者探测路径写错、探测超时时间太短，第一次请求慢就被判失败。
@@ -584,6 +617,10 @@ Ingress 报 502/503，先 describe ingress 看后端配置对不对；
 再看 Ingress controller 日志，connection refused 说明后端 Pod 没起来，upstream timed out 说明后端响应慢；  //kubectl logs -n ingress-nginx <ingress-controller-pod> | tail -30
 最后确认引用的 Service 存在且有 Endpoints。就按配置、日志、后端三层往下查。
 
+
+> Pod 之间无法互相访问，排查思路是什么？
+按从里到外排：先看两个 Pod 是否 Running、Ready，拿到 Pod IP；再用 IP 直连排除 DNS。然后查 NetworkPolicy 有没有拦、CNI 和节点路由通不通；
+如果是走 Service，再看 Endpoints ；最后查端口监听、安全组和抓包。
 
 > k8s遇到过什么问题
 我遇到过GKE节点NotReady的问题。现象是节点状态显示NotReady，Pod无法调度，新Pod全部Pending。
@@ -773,11 +810,9 @@ Docker 是“把应用装进盒子”的，把代码和依赖打包成镜像，�
 
 
 # helm
-> 请简述 Helm 是什么，它解决了 Kubernetes 应用部署的哪些痛点？
-“Helm 可以理解为 Kubernetes 的包管理和发布工具。它把 Deployment、Service、ConfigMap 等资源整理成一个 Chart，可以一键部署
-再通过 `values.yaml` 配置环境差异。这样能减少重复维护大量 YAML，也能让开发、测试、生产复用同一套模板。
-每次部署会生成一个 Release，方便查看版本、升级和回滚。
-简单说，Helm 主要解决 Kubernetes 应用部署难复用、配置难管理、版本难追踪的问题。”
+> 请简述 Helm 是什么，解决什么问题？
+Helm 就是 K8s 的包管理器，把一堆 YAML 打包成 Chart，用模板加 values 覆盖多环境配置，一条命令安装升级回滚
+Helm 解决 K8s 应用“YAML 多、难复用、多环境配置散、升级回滚麻烦”的问题
 
 
 > 请解释 Helm 的三大核心概念（Chart、Release、Repository）分别是什么？

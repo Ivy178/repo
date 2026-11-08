@@ -1,19 +1,33 @@
 # jenkins
 > 怎么做安全凭证
-把凭证存到到jenkins，定义凭证ID、类型
+把凭证存到jenkins，定义凭证ID、类型
 在pipeline中通过withCredentials引入凭证ID，然后通过variable注入脚本或命令中
- 
-> jkin遇到问题怎么处理
-在console output中定位error位置、查看错误的步骤，比如依赖冲突、命令错误、权限不够
- 
+
 > shalib怎么做
-填入sharelib文件名，输入参数，引用在sharelib函数，参数通过pipelineparams传入函数
- 
-> 参数化pipeline
-主要通过参数化构建、填上项目名、类型pipeline、定义参数、用scm形式拉远程代码、填上仓库地址、分支、pipeline路径
- 
+Jenkinsfile 顶部用 @Library 引入共享库；
+调用共享库文件名,通过 params.XXX 传入 Pipeline 参数，供共享库函数使用
+
+ > Jenkinsfile 应该放在哪里？为什么要纳入 Git 管理？
+通常放入github, 好处是流程可追溯、可评审、可复用、可回滚
+
+
 > 怎么测试pipeline
 copilot做静态分析、在dev环境中测试、dryrun
+
+> 参数化pipeline
+主要通过参数化构建、填上项目名、类型pipeline、定义参数、用scm形式拉远程代码、填上仓库地址、分支、pipeline路径
+就能输入参数构建，比如market、环境
+
+> 如何用一个 Job 管理多套测试环境？
+使用参数化构建，传入 dev或prod 参数，脚本根据参数读取对应credencial_id, 切换环境。
+
+> 如何build pipeline
+configuration、the project is parameterized(配置参数)
+选 "pipeline script from scm"、在SCM配置下repo URL、CREdentials、branches
+在script path选路径
+
+> jk遇到问题怎么处理
+确定失败的阶段，在console output中定位error位置、查看error，比如依赖冲突、命令错误、权限不够
  
 > 怎么调度
 主要用到参数化调度、在parameterizedCron中添加参数，可以根据不同环境、市场等参数去调度pipeline
@@ -21,59 +35,28 @@ copilot做静态分析、在dev环境中测试、dryrun
 > 怎么维护jenkins
 定期轮换credencial、在console_output查error、删除构建次数
  
-> 如何build pipeline
-configuration、the project is parameterized(配置参数)
-选 "pipeline script from scm"、在SCM配置下repo URL、CREdentials、branches
-在script path选路径
- 
-
 
 # cicd
 > 描述你写过的CI/CD pipeline代码 （AIA）
 cicd部署k8s，部署infra, 凭证轮换，定期关闭gcp资源，删除无用image
 
-
 > CI/CD 工具链和流程
-代码提交 → jenkins触发 CI → 编译、单测、构建镜像 → 推nexus仓库 → CD通过helm部署到 K8s。 //工具链一般 Github + Jenkins + Nexus + helm + K8s。
+我主要用 groovy 做pipeline，jenkins触发CI构建；配套用 Docker打包制品、nexus存镜像、通过helm部署到K8s 环境
+
 
 > cicd 过程
-打包并上传 ZIP 制品到 Nexus
-安全扫描
-获取nexus制品
-把制品部署到nonprod
+在jenkins中构建，打包并上传 ZIP 制品到 Nexus
+执行安全扫描
+获取nexus制品，把制品部署到nonprod
 生成工单，指定auto release时间
 部署到prod
 最后检查 Pod、Service、Ingress 和业务健康状态。
 
+> 怎么拉取代码
+打包镜像，上传到nexus
 
-> 如何优化CI/CD流水线构建时间 （Citi）
-Docker多阶段构建优化：
-使用Alpine Linux减少镜像体积70%
-.dockerignore优化，排除不必要文件
-构建缓存层合理规划
-
-> Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
-这是 Docker 多阶段构建：
-builder 阶段用 Maven 编译打包，产出 jar；
-runner 阶段只拿 OpenJDK 运行这个 jar。
-这样最终镜像不带 Maven 和源码，体积更小、攻击面更少。
-
-
-> 如何多阶段build
-多阶段构建就是 Dockerfile 里写多个 `FROM`，每个用 `AS` 命名一个阶段。
-前一个阶段负责编译打包，
-后一个阶段只 `COPY --from=builder` 把产物拿过来运行。
-最终镜像只保留运行所需，不带编译工具和源码，体积小、攻击面少。
-
-
-> 声明式和脚本式区别
-声明式是结构化语法，固定用 pipeline、agent、stages、steps，规范易读，适合标准 CI/CD，新手友好。
-脚本式是基于 Groovy 的自由代码，能写循环、条件、函数，灵活但复杂，容易乱。
-
-
-> 敏感数据在Terraform和CI/CD pipeline中如何存储等。
-敏感数据不写进代码和 tfvars，放 Secret Manager；CI/CD 用平台 Secret 注入
-
+> 评审机制
+cicd自动生成工单，approve之后可部署，确保可回溯、可回滚
 
 > Jenkins Pipeline 怎么写
 Jenkins Pipeline 一般用声明式，写一个 Jenkinsfile。
@@ -82,6 +65,49 @@ Jenkins Pipeline 一般用声明式，写一个 Jenkinsfile。
 每个 stage 里写 steps，具体命令用 sh 执行，比如 sh 'mvn clean package'。
 需要条件判断用 when，后置操作用 post，复杂逻辑用 script 块嵌 Groovy。
 
+> 如何优化CI/CD流水线构建时间 （Citi）
+Docker多阶段构建优化：
+使用Alpine Linux减少镜像体积70%
+.dockerignore优化，排除不必要文件
+构建缓存层合理规划
+
+> 如何多阶段build
+多阶段构建就是 Dockerfile 里写多个 `FROM`，每个用 `AS` 命名一个阶段。
+前一个阶段负责编译打包，
+后一个阶段只 `COPY --from=builder` 把产物拿过来运行。
+最终镜像只保留运行所需，不带编译工具和源码，体积小、攻击面少。
+
+
+> Dockerfile中FROM maven AS builder和FROM openjdk AS runner的用途是什么？
+这是 Docker 多阶段构建：
+builder 阶段用 Maven 编译打包，产出 jar；
+runner 阶段只拿 OpenJDK 运行这个 jar。
+这样最终镜像不带 Maven 和源码，体积更小、攻击面更少。
+
+> 敏感数据在Terraform和CI/CD pipeline中如何存储等。
+敏感数据不写进代码和 tfvars，放 Secret Manager；CI/CD 用平台 Secret 注入
+
+
+> 声明式和脚本式区别
+声明式是结构化语法，固定用 pipeline、agent、stages、steps，规范易读，适合标准 CI/CD，新手友好。
+脚本式是基于 Groovy 的自由代码，能写循环、条件、函数，灵活但复杂，容易乱。
+
+
+> 如何集成 SonarQube 做代码质量门禁？
+在流水线中执行扫描，设置质量阈值，不达标则阻断后续部署。
+
+> cicd代码质量失败怎么处理
+先看质量门禁卡在哪，如果是代码问题就打回开发修；如果是漏洞问题，看漏洞类型。一般升级依赖或打补丁，修完重跑去验证
+
+> 失败如何回滚
+在cicd中，用helm rollback 回滚到上一个版本
+
+> 不同分支推送到不同环境这样的做法可能会导致什么问题?
+不同分支推不同环境，就是每个环境各用一套代码、各改各的配置，时间一长肯定对不上
+
+> cicd中shift-left and shift-right是什么
+左移就是把测试往开发早期挪，越早发现问题成本越低；右移是把验证延伸到生产环境，靠监控和用户反馈持续验证。
+一个提前防错，一个线上闭环，合起来才是完整 CI/CD。
 
 > 新服务上线流程和沟通
 研发提上线单 → 确认依赖和资源 → 建 CI/CD 流水线 → 测试环境验证 → 灰度 → 全量。和研发沟通重点：镜像版本、环境变量、资源配额、健康检查、回滚方案。
@@ -89,29 +115,33 @@ Jenkins Pipeline 一般用声明式，写一个 Jenkinsfile。
 > 无损发布怎么做
 核心靠探针 + 滚动更新 + PDB。readiness 探针确保 Pod 就绪才接流量，滚动更新 maxUnavailable 设 0，PDB 保最小可用副本，再配合 preStop 优雅停机。
 
-> 灰度发布怎么实现
-按比例或按 Header 分流，用 Ingress、Service Mesh 或 Argo Rollouts。比如先 5% 流量，观察错误率和延迟，正常再逐步放大，异常自动回滚。
+> Canary有什么用
+Canary 发布就是先把新版本放给一小部分流量，盯着错误率、延迟和业务指标；
+没问题再逐步扩大，有问题立刻回滚。核心作用就是降低上线风险、缩小故障影响面。
 
 > 镜像扫描和回滚
 helm history <release-name> -n <namespace>   //查看指定release的历史版本
 helm rollback <release-name> 2 -n <namespace> --wait --timeout 5m    //回滚到指定版本（如版本号2）
 
 
+
 # docker
 > dockerfile 会用到哪些命令
-FROM
-WORKDIR
-ARG
-COPY
-RUN
+FROM 定基础镜像，
+WORKDIR 设工作目录，
+ARG 定义参数
+COPY 拷文件，
+RUN 跑构建命令
+ENTRYPOINT 定启动命令。
+
+> 写过什么dockerfile
+这个 Dockerfile 分两阶段：先用 Maven 配 Nexus 认证，编译打包出 jar；
+再把 jar、Beam 和依赖拷到 Python Dataflow 运行镜像，装 JDK17，配好入口启动。核心就是构建和运行分离
 
 
 > 应用是做什么的
 从 BigQuery 读取待评分数据，加载 GCS 中的 H2O MOJO 模型，对每条记录进行二分类预测，计算评分，并将结果写回 BigQuery。
 二分类预测: 不违约概率是多少，违约概率是多少
-
-
-
 
 
 
