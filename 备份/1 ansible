@@ -2,9 +2,9 @@
 > 你的项目怎么用ansible? 补丁
 上个项目主要用ansible给vm打补丁，就是系统软件包更新，比如RHEL/CentOS安全补丁、Debian/Ubuntu软件包更新
 
-> 知道 ansible 的 playbook 吗？用来做什么的？
-Playbook 就是 Ansible 的“运维剧本”，用 YAML 写清楚对哪些机器、按什么顺序执行哪些任务，
-用来批量装软件、改配置、发版本，把手工操作变成可重复的自动化流程。
+> playbook用来做什么的？
+Playbook 就是把一堆重复的批量运维任务写成可复用、可重复执行的剧本，按顺序在多台机器上跑，
+保证配置一致。临时命令只能干单条，多任务编排、幂等重跑就靠它。
 
 > Ansible 怎么用来实现自动化管理
 Ansible 先通过 inventory 定义要管哪些机器，再用 playbook 把任务编排成 YAML，通过 SSH 调用模块批量执行；
@@ -14,6 +14,7 @@ Ansible 先通过 inventory 定义要管哪些机器，再用 playbook 把任务
 • Playbook 是顶层剧本，定义对哪些机器、按什么顺序执行；
 • Role 是可复用的任务包，把 tasks、templates、vars、handlers 按标准目录组织好。
 • Playbook 调用 Role，Role 被复用，结构清晰、好维护。
+
 
 
 # 命令与 Playbook 使用
@@ -45,6 +46,9 @@ Ansible 先通过 inventory 定义要管哪些机器，再用 playbook 把任务
 首先在inventory 对300台机器分组，比如按业务、环境、区域分组
 然后用 Ansible 做批量管理，比如装软件、改配置、发版本全走 playbook，幂等可重复；
 
+First, group the 300 hosts in inventory, for example by business line, environment and region.
+Then use Ansible for batch management: software installation, configuration changes and version 
+deployment are all handled via playbooks, which are idempotent and re-runnable.
 
 
 # 异常处理与重试

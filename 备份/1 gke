@@ -213,6 +213,11 @@ Headless Service 就是 clusterIP: None，不分配虚拟 IP，让客户端自�
 Deployment 支持 RollingUpdate（滚动更新，默认）和 Recreate（先删后建）。
 发布模式常见：滚动发布、蓝绿发布、金丝雀发布。滚动最常用，蓝绿切流量快，金丝雀按比例放量。
 
+Deployment natively supports RollingUpdate delete old pods before creating new ones).
+Common deployment strategies include rolling update, blue‑green deployment and canary release. 
+Rolling update is the most widely used. Blue‑green switches traffic quickly, 
+while canary releases roll out traffic gradually by percentage.
+
 > 怎么保证发布不影响业务
 滚动更新会先起新 Pod，等就绪探针通过才摘旧 Pod，全程保证有副本在服务；maxUnavailable 控制不能少于多少人活着，maxSurge 控制最多能多起几个，两者配合就能做到零停机。
 就绪探针是流量开关：没就绪的 Pod 直接从 Service Endpoints 摘掉，流量只打健康的。PDB 再兜一层，限制节点维护这类自愿中断时一次最多停几个，防止运维动作把副本打穿
@@ -630,12 +635,11 @@ Ingress 报 502/503，先 describe ingress 看后端配置对不对；
 整个排查思路就是：先看节点状态，再查kubelet日志，最后用Cloud Monitoring定位资源瓶颈，短期扩容、长期调资源配HPA。
 
 > 一个线上服务突然变慢，你一般怎么排查？
-我一般会按照“自上而下”的思路来排查，先从现象入手，再逐层定位问题。
-- 先看监控，通过 Grafana 或监控面板确认问题范围，比如是整体变慢还是某个接口慢，同时观察 CPU、内存、QPS、延迟等指标，判断是否是资源瓶颈；
-- 定位到应用层，如果是 Java 服务，可以通过线程数、GC情况、jstack等方式分析是否存在线程阻塞、死锁或者GC频繁；
-- 往下看依赖服务，比如数据库、缓存等，检查是否存在慢查询、连接数耗尽等问题；
-- 再看基础设施层，比如K8s节点资源是否不足、Pod是否发生调度或重启、网络是否异常；
-- 如果以上都没有明显问题，会进一步结合日志进行分析，或者做链路追踪来定位具体瓶颈点。
+线上服务突然变慢我会自上而下排查：
+先看监控面板，确认是全局还是单接口慢，观察 CPU、内存、QPS、延迟判断资源瓶颈；
+接着看应用层，Java 服务看线程、GC，用 jstack 排查阻塞、死锁；
+然后检查数据库、缓存等依赖，看慢查询、连接耗尽；
+再核查 K8s 节点、Pod 调度重启和网络；最后结合日志、链路追踪定位瓶颈。
 整体思路是：监控 → 应用 → 依赖 → 基础设施，逐层收敛问题范围。
 
 
@@ -735,11 +739,8 @@ Standard 模式：用户需要自行管理 Worker 节点（创建、扩缩容、
 
 
 > 如果一个 K8s 集群挂了怎么办？你们的应急方案是什么？
-如果 GKE 集群出故障，我会先判断是控制面、节点网络，还是应用本身的问题，同时确认业务影响范围。处理原则是先保业务，再恢复集群。
-如果只是控制面暂时不可用，我会联系联系gcp support处理，因为GKE 的控制面由 Google 管理
-如果业务已经受影响，就按预案把流量切到备用集群，并确认数据库切换不会造成数据不一致。
-随后修复或重建集群，通过 IaC 和 Backup for GKE 恢复工作负载，恢复后先验证关键 Pod、Service、存储、数据库和核心业务，再逐步切回流量。
-平时要做好跨 zone 部署、备份和灾备演练，并明确恢复时间和数据恢复目标。
+先判断是控制面、节点还是应用问题，确认影响面。控制面归 Google 管，直接找 GCP Support；
+业务受影响就按预案切流量到备用集群，确认数据库一致。然后修或重建集群，用 IaC 和 Backup for GKE 恢复，验证核心链路后再切回。平时跨 zone、备份和演练要到位。
 
 
 
