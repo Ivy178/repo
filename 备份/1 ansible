@@ -1,3 +1,6 @@
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
 # 基础概念与用途
 > 你的项目怎么用ansible? 补丁
 上个项目主要用ansible给vm打补丁，就是系统软件包更新，比如RHEL/CentOS安全补丁、Debian/Ubuntu软件包更新
@@ -5,6 +8,13 @@
 > playbook用来做什么的？
 Playbook 就是把一堆重复的批量运维任务写成可复用、可重复执行的剧本，按顺序在多台机器上跑，
 保证配置一致。临时命令只能干单条，多任务编排、幂等重跑就靠它。
+
+Playbook 就是把你平时手工在服务器上敲的一堆命令，写成一个文件，
+Ansible 照着这个文件在多台机器上按顺序自动跑，重复跑也没事，
+保证每台机器配置一样。临时命令只能干一条，多步骤批量操作就用它。
+
+
+
 
 > Ansible 怎么用来实现自动化管理
 Ansible 先通过 inventory 定义要管哪些机器，再用 playbook 把任务编排成 YAML，通过 SSH 调用模块批量执行；
