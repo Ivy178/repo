@@ -14,6 +14,10 @@ Ansible 照着这个文件在多台机器上按顺序自动跑，重复跑也没
 保证每台机器配置一样。临时命令只能干一条，多步骤批量操作就用它。
 
 
+A playbook is a file containing commands you normally run manually on servers.
+Ansible executes these steps sequentially across many machines automatically.
+It is safe to rerun, and keeps consistent configurations on all hosts.
+Ad-hoc commands handle only single tasks. Use playbooks for multi-step batches.
 
 
 > Ansible 怎么用来实现自动化管理
